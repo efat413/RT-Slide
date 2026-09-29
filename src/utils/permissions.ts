@@ -18,7 +18,7 @@ import {
   isSuperAdminOnlyPermission,
   mapLegacyPermissionsToGranular,
 } from '../server/permissions';
-import { type UserAccount, type AdminPermissions, type UserRole, isMasterAdminEmail } from '../types';
+import { type UserAccount, type AdminPermissions, type UserRole } from '../types';
 
 export {
   PERMISSION_KEYS,
@@ -55,7 +55,7 @@ export function hasUserPermission(
   }
 
   // 1. SUPER_ADMIN: Full authority over all features and sensitive operations
-  if (user.role === 'super_admin' || isMasterAdminEmail(user.email)) {
+  if (user.role === 'super_admin') {
     return true;
   }
 

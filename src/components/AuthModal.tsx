@@ -16,7 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { UserRole, isMasterAdminEmail } from '../types';
+import { UserRole } from '../types';
 import { authApi } from '../services/authApi';
 
 export const AuthModal: React.FC = () => {
@@ -105,8 +105,7 @@ export const AuthModal: React.FC = () => {
         const isPrivilegedAdmin =
           res.user.role === 'super_admin' ||
           res.user.role === 'admin' ||
-          res.user.role === 'sub_admin' ||
-          isMasterAdminEmail(res.user.email);
+          res.user.role === 'sub_admin';
 
         if (isPrivilegedAdmin) {
           setCurrentView('admin');

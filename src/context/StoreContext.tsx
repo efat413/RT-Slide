@@ -18,7 +18,6 @@ import {
   ToastNotificationData,
   PixelEventLog,
   TrackingUserData,
-  isMasterAdminEmail,
   Expense,
   ExpenseType,
   ProfitAnalyticsSummary,
@@ -456,31 +455,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       if (parsedUsers.length === 0) {
         parsedUsers = [...INITIAL_USERS];
-      }
-
-      // Ensure primary master admin account exists in client representation
-      const masterAdminIndex = parsedUsers.findIndex(
-        (u) => isMasterAdminEmail(u.email) || u.id === 'user-admin-efat' || u.role === 'super_admin'
-      );
-
-      if (masterAdminIndex === -1) {
-        parsedUsers.unshift({
-          id: 'user-admin-efat',
-          name: 'Efat Admin',
-          email: 'cmt413uec@gmail.com',
-          role: 'super_admin',
-          permissions: SUPER_ADMIN_PERMISSIONS,
-          phone: '+8801518739561',
-          createdAt: '2026-01-01T00:00:00.000Z',
-        });
-      } else {
-        // Guarantee super_admin role with full permissions
-        parsedUsers[masterAdminIndex] = {
-          ...parsedUsers[masterAdminIndex],
-          role: 'super_admin',
-          permissions: SUPER_ADMIN_PERMISSIONS,
-          name: parsedUsers[masterAdminIndex].name || 'Efat Admin',
-        };
       }
 
       // Ensure all pre-configured accounts for testing and RBAC verification are included
@@ -1031,7 +1005,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       let ordsRes: PromiseSettledResult<{ success: boolean; orders: Order[] }> | null = null;
 
       if (isAdminLoggedIn && !isAuthInitializing && currentUser) {
-        const isSuper = currentUser.role === 'super_admin' || isMasterAdminEmail(currentUser.email);
+        const isSuper = currentUser.role === 'super_admin';
         const canFetchUsers =
           isSuper ||
           hasUserPermission(currentUser, 'user.view') ||
@@ -1149,7 +1123,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const refreshOrders = useCallback(async () => {
     if (!isAdminLoggedIn || isAuthInitializing || !currentUser) return;
-    const isSuper = currentUser.role === 'super_admin' || isMasterAdminEmail(currentUser.email);
+    const isSuper = currentUser.role === 'super_admin';
     const canFetchOrders =
       isSuper ||
       hasUserPermission(currentUser, 'order.view') ||
@@ -1264,8 +1238,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             const isPrivileged =
               res.user.role === 'admin' ||
               res.user.role === 'super_admin' ||
-              res.user.role === 'sub_admin' ||
-              isMasterAdminEmail(res.user.email);
+              res.user.role === 'sub_admin';
 
             setIsAdminLoggedIn(isPrivileged);
             try {
@@ -2148,8 +2121,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         const isPrivileged =
           apiRes.user.role === 'admin' ||
           apiRes.user.role === 'super_admin' ||
-          apiRes.user.role === 'sub_admin' ||
-          isMasterAdminEmail(apiRes.user.email);
+          apiRes.user.role === 'sub_admin';
 
         if (isPrivileged) {
           setIsAdminLoggedIn(true);
@@ -2258,14 +2230,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: false, message: 'User account not found.' };
     }
 
-    // Super Admin protection guard: cmt413uec@gmail.com cannot be modified or demoted
-    if (
-      target.email.toLowerCase().trim() === 'cmt413uec@gmail.com' ||
-      target.id === 'user-admin-efat'
-    ) {
+    // Super Admin protection guard: Super Admin accounts cannot have permissions revoked or role demoted
+    if (target.role === 'super_admin') {
       return {
         success: false,
-        message: 'The master Super Admin account (cmt413uec@gmail.com) is permanently protected and cannot have permissions revoked or role demoted.',
+        message: 'Super Administrator accounts are permanently protected and cannot have permissions revoked or role demoted.',
       };
     }
 
@@ -2334,14 +2303,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (!target) {
       return { success: false, message: 'Account not found.' };
     }
-    // Protect root master super admin account from deletion
-    if (
-      target.email.toLowerCase().trim() === 'cmt413uec@gmail.com' ||
-      target.id === 'user-admin-efat'
-    ) {
+    // Protect super admin accounts from deletion
+    if (target.role === 'super_admin') {
       return {
         success: false,
-        message: 'The master Super Admin account (cmt413uec@gmail.com) is permanently protected and cannot be deleted.',
+        message: 'Super Administrator accounts are permanently protected and cannot be deleted.',
       };
     }
 
@@ -2537,8 +2503,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const isPrivileged =
         res.user.role === 'admin' ||
         res.user.role === 'super_admin' ||
-        res.user.role === 'sub_admin' ||
-        isMasterAdminEmail(res.user.email);
+        res.user.role === 'sub_admin';
       if (isPrivileged) {
         setIsAdminLoggedIn(true);
         try {

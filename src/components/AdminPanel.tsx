@@ -98,7 +98,6 @@ import {
   UserAccount,
   UserRole,
   AdminPermissions,
-  isMasterAdminEmail,
   ProfitAnalyticsSummary,
 } from '../types';
 import { BrandLogo } from './BrandLogo';
@@ -520,15 +519,14 @@ export const AdminPanel: React.FC = () => {
       currentUser &&
       (currentUser.role === 'super_admin' ||
         currentUser.role === 'admin' ||
-        currentUser.role === 'sub_admin' ||
-        isMasterAdminEmail(currentUser.email))
+        currentUser.role === 'sub_admin')
     );
 
   // Super Admin security check: Strictly Super Administrator only
   const isSuperAdmin = Boolean(
     isPrivilegedAdmin &&
     currentUser &&
-    (currentUser.role === 'super_admin' || isMasterAdminEmail(currentUser.email))
+    currentUser.role === 'super_admin'
   );
 
   // Executive Dashboard Profit & Financial summaries
@@ -860,9 +858,9 @@ export const AdminPanel: React.FC = () => {
 
   // Filtered Accounts list:
   const displayedUsers = users.filter((u) => {
-    const isPrimaryMaster = u.email.toLowerCase() === 'cmt413uec@gmail.com' || u.id === 'user-admin-efat';
+    const isSuperAdminAccount = u.role === 'super_admin';
     if (accountRoleFilter !== 'all') {
-      if (accountRoleFilter === 'super_admin' && !(u.role === 'super_admin' || isPrimaryMaster)) return false;
+      if (accountRoleFilter === 'super_admin' && !isSuperAdminAccount) return false;
       if (accountRoleFilter === 'sub_admin' && u.role !== 'sub_admin') return false;
       if (accountRoleFilter === 'admin' && u.role !== 'admin') return false;
       if (accountRoleFilter === 'customer' && u.role !== 'customer') return false;
@@ -2006,7 +2004,7 @@ export const AdminPanel: React.FC = () => {
       return;
     }
     // Super Admin accounts cannot be edited via ordinary permission editing
-    if (targetUser.role === 'super_admin' || isMasterAdminEmail(targetUser.email) || targetUser.id === 'user-admin-efat') {
+    if (targetUser.role === 'super_admin') {
       showNotification('warning', 'Action Prohibited', 'Super Administrator accounts cannot be modified through ordinary permission editing.');
       return;
     }
@@ -2120,18 +2118,18 @@ export const AdminPanel: React.FC = () => {
               </h1>
               <div className="flex items-center gap-2 mt-0.5">
                 <p className="text-[10px] text-emerald-400 font-mono">
-                  {currentUser?.email || 'cmt413uec@gmail.com'}
+                  {currentUser?.email || ''}
                 </p>
                 <span
                   className={`text-[9px] px-2 py-0.5 rounded-full font-bold uppercase ${
-                    currentUser?.role === 'super_admin' || currentUser?.email === 'cmt413uec@gmail.com'
+                    currentUser?.role === 'super_admin'
                       ? 'bg-amber-400/20 text-amber-300 border border-amber-400/40'
                       : currentUser?.role === 'sub_admin'
                       ? 'bg-purple-400/20 text-purple-300 border border-purple-400/40'
                       : 'bg-emerald-400/20 text-emerald-300 border border-emerald-400/40'
                   }`}
                 >
-                  {currentUser?.email === 'cmt413uec@gmail.com' || currentUser?.role === 'super_admin'
+                  {currentUser?.role === 'super_admin'
                     ? 'Super Admin'
                     : currentUser?.role === 'sub_admin'
                     ? 'Sub-Admin Staff'
@@ -5696,7 +5694,7 @@ export const AdminPanel: React.FC = () => {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600">
-                    Master Email: <code className="font-mono font-bold text-slate-800 bg-white/80 px-1.5 py-0.5 rounded border border-amber-200">cmt413uec@gmail.com</code> (Protected root account with unrestricted store privileges).
+                    Active Account: <code className="font-mono font-bold text-slate-800 bg-white/80 px-1.5 py-0.5 rounded border border-amber-200">{currentUser?.email || 'Super Administrator'}</code> (Protected account with unrestricted store privileges).
                   </p>
                 </div>
               </div>
@@ -5754,9 +5752,7 @@ export const AdminPanel: React.FC = () => {
                         .filter(
                           (u) =>
                             (u.role === 'admin' || u.role === 'sub_admin') &&
-                            u.role !== 'super_admin' &&
-                            !isMasterAdminEmail(u.email) &&
-                            u.id !== 'user-admin-efat'
+                            u.role !== 'super_admin'
                         )
                         .map((u) => (
                           <option key={u.id} value={u.id}>
@@ -5846,7 +5842,7 @@ export const AdminPanel: React.FC = () => {
                 </div>
                 <div className={`text-xs font-medium ${accountRoleFilter === 'super_admin' ? 'text-amber-100' : 'text-slate-500'}`}>Super Admins</div>
                 <div className="text-xl font-bold font-display">
-                  {users.filter((u) => u.role === 'super_admin' || u.email.toLowerCase() === 'cmt413uec@gmail.com' || u.id === 'user-admin-efat').length}
+                  {users.filter((u) => u.role === 'super_admin').length}
                 </div>
               </button>
 
@@ -5956,7 +5952,7 @@ export const AdminPanel: React.FC = () => {
                         : 'bg-amber-50 hover:bg-amber-100 text-amber-800'
                     }`}
                   >
-                    Super Admins ({users.filter((u) => u.role === 'super_admin' || u.email.toLowerCase() === 'cmt413uec@gmail.com' || u.id === 'user-admin-efat').length})
+                    Super Admins ({users.filter((u) => u.role === 'super_admin').length})
                   </button>
 
                   <button
@@ -6062,8 +6058,7 @@ export const AdminPanel: React.FC = () => {
                     ) : (
                     displayedUsers
                       .map((u) => {
-                        const isPrimaryMaster =
-                          u.email.toLowerCase() === 'cmt413uec@gmail.com' || u.id === 'user-admin-efat';
+                        const isPrimaryMaster = u.role === 'super_admin';
                         return (
                           <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
                             <td className="px-5 py-3.5">
@@ -6137,7 +6132,7 @@ export const AdminPanel: React.FC = () => {
                               ) : (
                                 <div className="flex items-center justify-end gap-1.5">
                                   {/* Manage Role & Granular Permissions Button (Super Admin Exclusive) */}
-                                  {currentUser?.role === 'super_admin' && hasPermission('permission.manage') && u.role !== 'super_admin' && !isMasterAdminEmail(u.email) && (
+                                  {currentUser?.role === 'super_admin' && hasPermission('permission.manage') && u.role !== 'super_admin' && (
                                     <button
                                       type="button"
                                       id={`permissions-btn-${u.id}`}
@@ -6213,18 +6208,13 @@ export const AdminPanel: React.FC = () => {
                   </p>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-500 bg-white px-2.5 py-1 rounded-full border border-slate-200 self-start sm:self-auto">
-                  {users.filter(u => u.role !== 'super_admin' && u.email.toLowerCase().trim() !== 'cmt413uec@gmail.com' && u.id !== 'user-admin-efat').length} Non-Super Admin Accounts
+                  {users.filter(u => u.role !== 'super_admin').length} Non-Super Admin Accounts
                 </span>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                 {users
-                  .filter(
-                    (u) =>
-                      u.role !== 'super_admin' &&
-                      u.email.toLowerCase().trim() !== 'cmt413uec@gmail.com' &&
-                      u.id !== 'user-admin-efat'
-                  )
+                  .filter((u) => u.role !== 'super_admin')
                   .map((u) => {
                     const isPwVisible = Boolean(visibleCredentialsPasswords[u.id]);
                     return (
@@ -6323,7 +6313,7 @@ export const AdminPanel: React.FC = () => {
                         </div>
 
                         {/* Super Admin Grant Permissions Action */}
-                        {currentUser?.role === 'super_admin' && hasPermission('permission.manage') && u.role !== 'super_admin' && !isMasterAdminEmail(u.email) && (
+                        {currentUser?.role === 'super_admin' && hasPermission('permission.manage') && u.role !== 'super_admin' && (
                           <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between gap-2">
                             <button
                               type="button"

@@ -24,7 +24,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { ExpenseType, ProfitAnalyticsSummary, isMasterAdminEmail } from '../types';
+import { ExpenseType, ProfitAnalyticsSummary } from '../types';
 
 export const AdminProfitAnalyticsTab: React.FC = () => {
   const {
@@ -38,7 +38,7 @@ export const AdminProfitAnalyticsTab: React.FC = () => {
     showNotification,
   } = useStore();
 
-  const isSuperAdmin = currentUser?.role === 'super_admin' || isMasterAdminEmail(currentUser?.email);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const [selectedPeriod, setSelectedPeriod] = useState<'today' | 'month' | 'previous_month' | 'custom'>('today');
   const [customStartDate, setCustomStartDate] = useState<string>(() => {

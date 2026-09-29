@@ -17,7 +17,6 @@ import {
   Bug,
   TrendingUp,
 } from 'lucide-react';
-import { isMasterAdminEmail } from '../types';
 
 interface AdminSidebarProps {
   activeTab: string;
@@ -74,7 +73,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   currentUser,
   setCurrentView,
 }) => {
-  const isSuperAdmin = currentUser?.role === 'super_admin' || isMasterAdminEmail(currentUser?.email);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const menuItems = [
     {

@@ -575,12 +575,16 @@ async function requireAuth(
     };
   }
 
-  // Session Invalidation: If user has a password hash in D1 and token carries pwdSig, verify it matches
-  if (dbUser.password && tokenUser.pwdSig) {
+  // Session Invalidation: If user has a password in D1, verify token carries valid pwdSig
+  if (dbUser.password) {
     const expectedSig = await computePasswordSignature(dbUser.password);
-    const isSigValid = tokenUser.pwdSig.length === 16
-      ? tokenUser.pwdSig === dbUser.password.slice(0, 16)
-      : tokenUser.pwdSig === expectedSig;
+    const tokenSig = tokenUser.pwdSig;
+    const isSigValid = Boolean(
+      tokenSig &&
+      (tokenSig.length === 16
+        ? tokenSig === dbUser.password.slice(0, 16)
+        : tokenSig === expectedSig)
+    );
 
     if (!isSigValid) {
       return {
@@ -2647,32 +2651,84 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       }
 
       try {
-        const body = (await request.json()) as any;
-        const updates = body.updates || body.user || body;
+        const body = (await request.json().catch(() => ({}))) as any;
+        const updates = body.updates || body.user || body || {};
 
-        // Self-updates cannot alter role or permissions without super_admin
+        // Never allow altering internal immutable primary key or timestamps
+        delete updates.id;
+        delete updates.createdAt;
+        delete updates.created_at;
+        delete updates.updatedAt;
+        delete updates.updated_at;
+
+        // Self-updates cannot alter role or permissions
         if (isSelf && auth!.role !== 'super_admin') {
           delete updates.role;
           delete updates.permissions;
           delete updates.permissions_json;
         }
 
-        // Security Control: Self-service password or email modification requires current password verification
-        if (isSelf && (updates.password || (updates.email && updates.email !== auth!.dbUser.email))) {
-          const currentPassword = String(body.currentPassword || body.current_password || '').trim();
+        const isChangingEmail = Boolean(
+          updates.email && updates.email.toLowerCase().trim() !== auth!.dbUser.email.toLowerCase().trim()
+        );
+        const isChangingPassword = Boolean(updates.password && String(updates.password).trim());
+
+        // Security Control: Self-service password or email modification strictly requires current password verification
+        if (isSelf && (isChangingEmail || isChangingPassword)) {
+          const currentPassword = String(
+            body.currentPassword || body.current_password || body.oldPassword || ''
+          ).trim();
           if (!currentPassword) {
             return jsonResponse(
-              { success: false, error: 'Current password confirmation is required to change your password or email.' },
+              {
+                success: false,
+                error: 'Current password confirmation is required to change your email or password.',
+              },
               400
             );
           }
           const isCurrentValid = await verifyPassword(currentPassword, auth!.dbUser.password || '');
           if (!isCurrentValid) {
             return jsonResponse(
-              { success: false, error: 'Current password does not match.' },
+              { success: false, error: 'Current password does not match. Please verify and try again.' },
               400
             );
           }
+        }
+
+        // Validate new password policy if password is being updated
+        if (updates.password) {
+          const plainPw = String(updates.password).trim();
+          if (plainPw.length < 6) {
+            return jsonResponse(
+              { success: false, error: 'New password must be at least 6 characters long.' },
+              400
+            );
+          }
+          updates.password = plainPw;
+        }
+
+        // Validate email format and uniqueness if email is being updated
+        if (updates.email) {
+          const cleanEmail = String(updates.email).toLowerCase().trim();
+          if (!cleanEmail || !cleanEmail.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+            return jsonResponse(
+              { success: false, error: 'Please enter a valid email address.' },
+              400
+            );
+          }
+          const existingWithEmail = await env.DB.prepare(
+            'SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ?'
+          )
+            .bind(cleanEmail, usrId)
+            .first();
+          if (existingWithEmail) {
+            return jsonResponse(
+              { success: false, error: 'This email address is already in use by another account.' },
+              400
+            );
+          }
+          updates.email = cleanEmail;
         }
 
         // Prevent unauthorized escalation of role to super_admin
@@ -2697,7 +2753,31 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         }
 
         const updated = await updateUserInD1(env.DB, usrId, updates);
-        return jsonResponse({ success: true, user: updated });
+
+        // If self updated password or email, issue fresh session token with updated pwdSig so session continues
+        let freshCookieHeader: string | undefined;
+        if (isSelf && (isChangingPassword || isChangingEmail)) {
+          const updatedUserRow = await getUserByEmailOrUsername(env.DB, updated.email);
+          const newPwdSig = await computePasswordSignature(updatedUserRow?.password || '');
+          const secret = await resolveAuthSecret(env);
+          const freshToken = await createAuthToken(
+            {
+              userId: updated.id,
+              email: updated.email,
+              role: updated.role,
+              pwdSig: newPwdSig,
+            },
+            secret
+          );
+          freshCookieHeader = buildAuthCookieHeader(request, freshToken, 7 * 86400);
+        }
+
+        const responseHeaders: Record<string, string> = {};
+        if (freshCookieHeader) {
+          responseHeaders['Set-Cookie'] = freshCookieHeader;
+        }
+
+        return jsonResponse({ success: true, user: updated }, 200, responseHeaders);
       } catch (err: any) {
         return jsonResponse({ success: false, error: err?.message }, 500);
       }

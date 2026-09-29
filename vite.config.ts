@@ -2,6 +2,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import fs from 'fs';
+import nodeCrypto from 'crypto';
 import { defineConfig, Plugin } from 'vite';
 import {
   INITIAL_CATEGORIES,
@@ -80,22 +81,57 @@ function localApiDevPlugin(): Plugin {
 
   let devCoupons: any[] = [...INITIAL_COUPONS];
   let devReviews: any[] = [...INITIAL_REVIEWS];
-  let devUsers: any[] = [...INITIAL_USERS];
+
+  // Resolve Super Admin identities server-side from environment variables
+  const configuredSuperAdminEmails: string[] = (
+    process.env.SUPER_ADMIN_EMAILS || 'cmt413uec@gmail.com,efatmkt5@gmail.com,efatmkt7@gmail.com'
+  )
+    .split(',')
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+
+  const devSuperAdminAccounts: any[] = configuredSuperAdminEmails.map((email, idx) => ({
+    id: idx === 0 ? 'user-admin-efat' : `user-admin-super-${idx}`,
+    name: 'Super Administrator',
+    email: email,
+    role: 'super_admin',
+    permissions: {
+      canManageOrders: true,
+      canManageProducts: true,
+      canManageCategories: true,
+      canManageAccounts: true,
+      canManageSettings: true,
+    },
+    phone: '+8801518739561',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  }));
+
+  let devUsers: any[] = [
+    ...devSuperAdminAccounts,
+    ...INITIAL_USERS.filter((u) => u.role !== 'super_admin'),
+  ];
+
   // In-memory PBKDF2 password hashes for isolated local development
   // Never contains plaintext credentials. Seeded with PBKDF2 hashes from initial migration.
   const devUserPasswordHashes = new Map<string, string>();
   const SEED_ADMIN_HASH = 'pbkdf2:100000:dd23d4a0a9a6e169ba4da04ed543b1f2:2274805ff7623c6540d0196d56ca2627e0f9482174f49244640aeff4dc7101a4';
   const SEED_STAFF_HASH = 'pbkdf2:100000:a9ef994f75098dcf46b34df6dc87de7e:3152dcd6676590554d2fda38a8ed1a65921a7eb9ed787e53c8d1bc52fd4e5b55';
   const SEED_CUST_HASH = 'pbkdf2:100000:070d5b807b9f06dec3d50266509c1c25:240a2c2acd45f238a5d7c8d5c68580ceaa24536c0a94a70eb18b183bae1780d2';
-  devUserPasswordHashes.set('cmt413uec@gmail.com', SEED_ADMIN_HASH);
-  devUserPasswordHashes.set('efatmkt5@gmail.com', SEED_ADMIN_HASH);
-  devUserPasswordHashes.set('efatmkt7@gmail.com', SEED_ADMIN_HASH);
+
+  configuredSuperAdminEmails.forEach((email) => {
+    devUserPasswordHashes.set(email, SEED_ADMIN_HASH);
+  });
   devUserPasswordHashes.set('admin', SEED_ADMIN_HASH);
   devUserPasswordHashes.set('efatadmin', SEED_ADMIN_HASH);
   devUserPasswordHashes.set('subadmin@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('staff@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('operations@rongdhonu.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('sakib@gmail.com', SEED_CUST_HASH);
+
+  const computeDevPasswordSig = (hash: string): string => {
+    if (!hash) return '';
+    return nodeCrypto.createHash('sha256').update(hash).digest('hex').slice(0, 32);
+  };
   const devMedia = new Map<string, { buffer: Buffer; contentType: string }>();
   let devExpenses: any[] = [];
   let devCourierWebhooks: any[] = Array.isArray(devSettings.courierWebhooks) ? devSettings.courierWebhooks : [];
@@ -201,14 +237,33 @@ function localApiDevPlugin(): Plugin {
             u.id === email ||
             (u.name && u.name.toLowerCase().trim() === email)
         );
-        if (!foundUser && (email === 'admin' || email === 'efatadmin' || email === 'cmt413uec@gmail.com')) {
-          foundUser = devUsers.find((u) => u.email === 'cmt413uec@gmail.com');
+        if (!foundUser && (email === 'admin' || email === 'efatadmin' || configuredSuperAdminEmails.includes(email))) {
+          foundUser = devUsers.find((u) => u.email === configuredSuperAdminEmails[0]);
         }
 
         if (!foundUser) {
           return {
             error: { status: 401, body: { success: false, error: 'Unauthorized: User account no longer exists.' } },
           };
+        }
+
+        // Session Invalidation: Verify token's pwdSig matches current password hash signature
+        const userEmailKey = (foundUser.email || '').toLowerCase();
+        const currentHash = devUserPasswordHashes.get(userEmailKey);
+        if (currentHash && decoded.pwdSig !== undefined) {
+          const expectedSig = computeDevPasswordSig(currentHash);
+          const tokenSig = decoded.pwdSig;
+          const isSigValid = Boolean(
+            tokenSig &&
+            (tokenSig.length === 16
+              ? tokenSig === currentHash.slice(0, 16)
+              : tokenSig === expectedSig)
+          );
+          if (!isSigValid) {
+            return {
+              error: { status: 401, body: { success: false, error: 'Unauthorized: Session invalidated or password was changed. Please log in again.' } },
+            };
+          }
         }
 
         const role = foundUser.role || decoded.role || 'customer';
@@ -810,32 +865,30 @@ function localApiDevPlugin(): Plugin {
             const isSuperAdminIdentifier =
               identifier === 'admin' ||
               identifier === 'efatadmin' ||
-              identifier === 'cmt413uec@gmail.com' ||
-              identifier === 'efatmkt7@gmail.com' ||
-              identifier === 'efatmkt5@gmail.com';
+              configuredSuperAdminEmails.includes(identifier);
 
             let foundUser = devUsers.find(
               (u) =>
-                u.email.toLowerCase() === identifier ||
+                u.email?.toLowerCase() === identifier ||
                 u.id.toLowerCase() === identifier ||
                 (u.name && u.name.toLowerCase().trim() === identifier)
             );
             if (!foundUser && isSuperAdminIdentifier) {
-              foundUser = devUsers.find((u) => u.email === 'cmt413uec@gmail.com') ||
-                devUsers.find((u) => u.email === 'efatmkt7@gmail.com') || {
-                  id: 'user-admin-efat',
-                  name: 'Efat Admin',
-                  email: identifier.includes('@') ? identifier : 'cmt413uec@gmail.com',
-                  role: 'super_admin',
-                  permissions: {
-                    canManageOrders: true,
-                    canManageProducts: true,
-                    canManageCategories: true,
-                    canManageAccounts: true,
-                    canManageSettings: true,
-                  },
-                  createdAt: new Date().toISOString(),
-                };
+              const targetEmail = identifier.includes('@') ? identifier : configuredSuperAdminEmails[0];
+              foundUser = devUsers.find((u) => u.email?.toLowerCase() === targetEmail.toLowerCase()) || {
+                id: 'user-admin-efat',
+                name: 'Super Administrator',
+                email: targetEmail,
+                role: 'super_admin',
+                permissions: {
+                  canManageOrders: true,
+                  canManageProducts: true,
+                  canManageCategories: true,
+                  canManageAccounts: true,
+                  canManageSettings: true,
+                },
+                createdAt: new Date().toISOString(),
+              };
             }
 
             let isPasswordValid = false;
@@ -843,7 +896,7 @@ function localApiDevPlugin(): Plugin {
             const storedHash =
               devUserPasswordHashes.get(identifier.toLowerCase()) ||
               devUserPasswordHashes.get(lookupKey) ||
-              (isSuperAdminIdentifier ? devUserPasswordHashes.get('cmt413uec@gmail.com') : null);
+              (isSuperAdminIdentifier ? devUserPasswordHashes.get(configuredSuperAdminEmails[0]) : null);
 
             if (storedHash) {
               isPasswordValid = await verifyPassword(password, storedHash);
@@ -854,11 +907,13 @@ function localApiDevPlugin(): Plugin {
               return res.end(JSON.stringify({ success: false, error: 'Invalid email/username or password.' }));
             }
 
+            const currentHash = devUserPasswordHashes.get(foundUser.email?.toLowerCase()) || storedHash || '';
             const devToken = `dev-jwt-${Buffer.from(
               JSON.stringify({
                 userId: foundUser.id,
                 email: foundUser.email || identifier,
                 role: foundUser.role || 'super_admin',
+                pwdSig: computeDevPasswordSig(currentHash),
                 exp: Date.now() + 7 * 86400 * 1000,
               })
             ).toString('base64')}`;
@@ -949,6 +1004,7 @@ function localApiDevPlugin(): Plugin {
                 userId: newCustomer.id,
                 email: newCustomer.email,
                 role: 'customer',
+                pwdSig: computeDevPasswordSig(hashedCust),
                 exp: Date.now() + 7 * 86400 * 1000,
               })
             ).toString('base64')}`;
@@ -977,10 +1033,10 @@ function localApiDevPlugin(): Plugin {
             }
 
             const targetUser = authResult.auth!.user;
-            const targetEmail = (targetUser?.email || 'cmt413uec@gmail.com').toLowerCase();
+            const targetEmail = (targetUser?.email || configuredSuperAdminEmails[0]).toLowerCase();
             const currentExpected =
               devUserPasswordHashes.get(targetEmail) ||
-              (targetUser?.role === 'super_admin' ? devUserPasswordHashes.get('cmt413uec@gmail.com') : undefined);
+              (targetUser?.role === 'super_admin' ? devUserPasswordHashes.get(configuredSuperAdminEmails[0]) : undefined);
             const isMatch = currentExpected
               ? await verifyPassword(currentPassword, currentExpected)
               : (Boolean(process.env.DEV_ADMIN_PASSWORD) && currentPassword === process.env.DEV_ADMIN_PASSWORD);
@@ -993,9 +1049,10 @@ function localApiDevPlugin(): Plugin {
             // Invalidate old password and set new PBKDF2 hashed password
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetEmail, newHashed);
-            if (targetUser?.role === 'super_admin' || targetEmail === 'cmt413uec@gmail.com') {
-              devUserPasswordHashes.set('cmt413uec@gmail.com', newHashed);
-              devUserPasswordHashes.set('efatmkt5@gmail.com', newHashed);
+            if (targetUser?.role === 'super_admin' || configuredSuperAdminEmails.includes(targetEmail)) {
+              configuredSuperAdminEmails.forEach((email) => {
+                devUserPasswordHashes.set(email, newHashed);
+              });
               devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
             }
@@ -1003,8 +1060,9 @@ function localApiDevPlugin(): Plugin {
             const freshToken = `dev-jwt-${Buffer.from(
               JSON.stringify({
                 userId: targetUser?.id || 'user-admin-efat',
-                email: targetUser?.email || 'cmt413uec@gmail.com',
+                email: targetUser?.email || targetEmail,
                 role: targetUser?.role || 'super_admin',
+                pwdSig: computeDevPasswordSig(newHashed),
                 exp: Date.now() + 7 * 86400 * 1000,
               })
             ).toString('base64')}`;
@@ -1203,9 +1261,10 @@ function localApiDevPlugin(): Plugin {
             }
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetUser.email.toLowerCase(), newHashed);
-            if (targetUser.role === 'super_admin' || targetUser.email === 'cmt413uec@gmail.com') {
-              devUserPasswordHashes.set('cmt413uec@gmail.com', newHashed);
-              devUserPasswordHashes.set('efatmkt5@gmail.com', newHashed);
+            if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
+              configuredSuperAdminEmails.forEach((email) => {
+                devUserPasswordHashes.set(email, newHashed);
+              });
               devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
             }
@@ -1299,7 +1358,7 @@ function localApiDevPlugin(): Plugin {
           }
 
           const targetUser = devUsers[targetIdx];
-          if (targetUser.role === 'super_admin' || targetUser.email === 'cmt413uec@gmail.com' || targetUser.id === 'user-admin-efat') {
+          if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
             return sendDevError(res, {
               status: 403,
               body: { success: false, error: 'Forbidden: Super Administrator permissions cannot be modified.' },
@@ -1923,7 +1982,7 @@ function localApiDevPlugin(): Plugin {
             const isSuper = authResult.auth!.role === 'super_admin';
             const usersToReturn = isSuper
               ? devUsers
-              : devUsers.filter((u) => u.role !== 'super_admin' && u.email !== 'cmt413uec@gmail.com');
+              : devUsers.filter((u) => u.role !== 'super_admin' && !configuredSuperAdminEmails.includes(u.email?.toLowerCase()));
 
             res.statusCode = 200;
             return res.end(JSON.stringify({ success: true, count: usersToReturn.length, users: usersToReturn.map(formatDevUserResponse) }));
@@ -1964,33 +2023,76 @@ function localApiDevPlugin(): Plugin {
               if (permErr) return sendDevError(res, permErr);
             }
 
-            return readBody((body) => {
+            return readBody(async (body) => {
               const idx = devUsers.findIndex((u) => u.id === usrId);
               if (idx < 0) {
                 res.statusCode = 404;
                 return res.end(JSON.stringify({ success: false, error: 'User not found' }));
               }
               const targetUser = devUsers[idx];
-              if (targetUser.role === 'super_admin' && authResult.auth!.role !== 'super_admin') {
+              const isTargetSuper = targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase());
+              if (isTargetSuper && authResult.auth!.role !== 'super_admin') {
                 return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Super Administrator account cannot be modified by other users.' } });
               }
-              const updates = body.updates || body.user || body;
+              const updates = body.updates || body.user || body || {};
+
+              delete updates.id;
+              delete updates.createdAt;
+              delete updates.updatedAt;
+
               if (isSelf && authResult.auth!.role !== 'super_admin') {
                 delete updates.role;
                 delete updates.permissions;
                 delete updates.permissions_json;
               }
-              // Security Control: Self-service password or email modification requires current password verification
-              if (isSelf && (updates.password || (updates.email && updates.email !== authResult.auth!.user.email))) {
-                const currentPassword = String(body.currentPassword || body.current_password || '').trim();
+
+              const isChangingEmail = Boolean(updates.email && updates.email.toLowerCase().trim() !== targetUser.email.toLowerCase().trim());
+              const isChangingPassword = Boolean(updates.password && String(updates.password).trim());
+
+              // Security Control: Self-service password or email modification strictly requires current password verification
+              if (isSelf && (isChangingEmail || isChangingPassword)) {
+                const currentPassword = String(body.currentPassword || body.current_password || body.oldPassword || '').trim();
                 if (!currentPassword) {
-                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password confirmation is required to change your password or email.' } });
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password confirmation is required to change your email or password.' } });
                 }
-                const isMatch = targetUser.password ? currentPassword === targetUser.password : true;
+                const storedHash = devUserPasswordHashes.get(targetUser.email.toLowerCase());
+                if (!storedHash) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Unable to verify credentials.' } });
+                }
+                const isMatch = await verifyPassword(currentPassword, storedHash);
                 if (!isMatch) {
-                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password does not match.' } });
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password does not match. Please verify and try again.' } });
                 }
               }
+
+              if (isChangingPassword) {
+                const plainPw = String(updates.password).trim();
+                if (plainPw.length < 6) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'New password must be at least 6 characters long.' } });
+                }
+                const newHashed = await hashPassword(plainPw);
+                delete updates.password; // NEVER store plaintext!
+                devUserPasswordHashes.set(targetUser.email.toLowerCase(), newHashed);
+              }
+
+              if (isChangingEmail) {
+                const cleanEmail = String(updates.email).toLowerCase().trim();
+                if (!cleanEmail || !cleanEmail.includes('@') || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Please enter a valid email address.' } });
+                }
+                const emailExists = devUsers.some((u) => u.id !== usrId && u.email?.toLowerCase().trim() === cleanEmail);
+                if (emailExists) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'This email address is already in use by another account.' } });
+                }
+                // Migrate password hash to new email
+                const existingHash = devUserPasswordHashes.get(targetUser.email.toLowerCase());
+                if (existingHash) {
+                  devUserPasswordHashes.set(cleanEmail, existingHash);
+                  devUserPasswordHashes.delete(targetUser.email.toLowerCase());
+                }
+                updates.email = cleanEmail;
+              }
+
               if (updates.role === 'super_admin' && authResult.auth!.role !== 'super_admin') {
                 return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Cannot promote account to Super Administrator.' } });
               }
@@ -2000,11 +2102,29 @@ function localApiDevPlugin(): Plugin {
                 delete updates.permissions;
                 delete updates.permissions_json;
               }
+
               devUsers[idx] = {
                 ...devUsers[idx],
                 ...updates,
                 ...(updates.role === 'customer' ? { permissions: undefined, permissions_json: null } : {}),
               };
+
+              // If self updated password or email, issue fresh session token with updated pwdSig so session continues
+              if (isSelf && (isChangingPassword || isChangingEmail)) {
+                const freshHash = devUserPasswordHashes.get(devUsers[idx].email.toLowerCase());
+                const freshSig = freshHash ? computeDevPasswordSig(freshHash) : '';
+                const freshToken = `dev-jwt-${Buffer.from(
+                  JSON.stringify({
+                    userId: devUsers[idx].id,
+                    email: devUsers[idx].email,
+                    role: devUsers[idx].role,
+                    pwdSig: freshSig,
+                    exp: Date.now() + 7 * 86400 * 1000,
+                  })
+                ).toString('base64')}`;
+                res.setHeader('Set-Cookie', buildDevAuthCookie(freshToken, 7 * 86400));
+              }
+
               res.statusCode = 200;
               return res.end(JSON.stringify({ success: true, user: formatDevUserResponse(devUsers[idx]) }));
             });
@@ -2018,10 +2138,7 @@ function localApiDevPlugin(): Plugin {
               res.statusCode = 404;
               return res.end(JSON.stringify({ success: false, error: 'User not found' }));
             }
-            if (targetUser.email === 'cmt413uec@gmail.com' || targetUser.id === 'user-admin-efat') {
-              return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Primary Super Administrator account cannot be deleted.' } });
-            }
-            if (targetUser.role === 'super_admin' && authResult.auth!.role !== 'super_admin') {
+            if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
               return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Super Administrator account cannot be deleted.' } });
             }
 
@@ -2049,7 +2166,7 @@ function localApiDevPlugin(): Plugin {
             return res.end(JSON.stringify({ success: false, error: 'User not found' }));
           }
 
-          const isTargetSuper = targetUser.role === 'super_admin' || targetUser.email === 'cmt413uec@gmail.com' || targetUser.id === 'user-admin-efat';
+          const isTargetSuper = targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase());
           if (isTargetSuper) {
             const isSuperAdminRequester = authResult.auth!.role === 'super_admin';
             const isSelf = authResult.auth!.user.id === targetUser.id;
@@ -2083,8 +2200,9 @@ function localApiDevPlugin(): Plugin {
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetUser.email.toLowerCase(), newHashed);
             if (isTargetSuper) {
-              devUserPasswordHashes.set('cmt413uec@gmail.com', newHashed);
-              devUserPasswordHashes.set('efatmkt5@gmail.com', newHashed);
+              configuredSuperAdminEmails.forEach((email) => {
+                devUserPasswordHashes.set(email, newHashed);
+              });
               devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
             }
@@ -3680,7 +3798,7 @@ function localApiDevPlugin(): Plugin {
                 date: exp.date || new Date().toISOString().slice(0, 10),
                 note: exp.note ? String(exp.note).trim() : undefined,
                 createdAt: new Date().toISOString(),
-                createdBy: 'cmt413uec@gmail.com',
+                createdBy: authResult.auth?.user?.email || 'admin',
               };
               devExpenses.unshift(newExp);
 

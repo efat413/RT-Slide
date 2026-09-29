@@ -26,7 +26,6 @@ import {
   Home,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { isMasterAdminEmail } from '../types';
 import { BrandLogo } from './BrandLogo';
 import { OrderTrackingDropdown } from './OrderTrackingDropdown';
 import { formatWhatsAppLink } from '../utils/phone';
@@ -127,8 +126,7 @@ export const Header: React.FC = () => {
     isAdminLoggedIn ||
     currentUser?.role === 'super_admin' ||
     currentUser?.role === 'admin' ||
-    currentUser?.role === 'sub_admin' ||
-    isMasterAdminEmail(currentUser?.email);
+    currentUser?.role === 'sub_admin';
 
   const handleCategorySelect = (categoryId: string | null) => {
     setSelectedCategory(categoryId);

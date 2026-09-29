@@ -574,36 +574,6 @@ export const INITIAL_COURIER_CONFIGS: CourierApiConfig[] = [
 
 export const INITIAL_USERS: UserAccount[] = [
   {
-    id: 'user-admin-efat-current',
-    name: 'Efat (Super Admin)',
-    email: 'efatmkt7@gmail.com',
-    role: 'super_admin',
-    permissions: {
-      canManageOrders: true,
-      canManageProducts: true,
-      canManageCategories: true,
-      canManageAccounts: true,
-      canManageSettings: true,
-    },
-    phone: '+8801518739561',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
-    id: 'user-admin-efat',
-    name: 'Efat Admin',
-    email: 'cmt413uec@gmail.com',
-    role: 'super_admin',
-    permissions: {
-      canManageOrders: true,
-      canManageProducts: true,
-      canManageCategories: true,
-      canManageAccounts: true,
-      canManageSettings: true,
-    },
-    phone: '+8801518739561',
-    createdAt: '2026-01-01T00:00:00.000Z',
-  },
-  {
     id: 'user-subadmin-operations',
     name: 'Operations Staff',
     email: 'operations@rongdhonu.com',

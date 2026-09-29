@@ -372,7 +372,7 @@ export const AdminDebugTab: React.FC<AdminDebugTabProps> = ({ onNavigateTab }) =
     const reportData = {
       timestamp: new Date().toISOString(),
       appName: settings.siteName || 'Rongdhonu Trade',
-      user: currentUser?.email || 'cmt413uec@gmail.com',
+      user: currentUser?.email || 'authenticated-user',
       storageUsage: `${storageInfo.kb} KB (${storageInfo.percentage}%)`,
       subsystems: backendSystemsStatus.map((s) => ({
         system: s.name,

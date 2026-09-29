@@ -30,7 +30,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
-import { Product, Order, DeliveryZone, isMasterAdminEmail } from '../types';
+import { Product, Order, DeliveryZone } from '../types';
 import { authApi } from '../services/authApi';
 import { EditDeliveryInfoModal } from './EditDeliveryInfoModal';
 import { ConfirmModal } from './ConfirmModal';
@@ -219,8 +219,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({ isOpen, onCl
   const isPrivilegedAdmin =
     currentUser.role === 'super_admin' ||
     currentUser.role === 'admin' ||
-    currentUser.role === 'sub_admin' ||
-    isMasterAdminEmail(currentUser.email);
+    currentUser.role === 'sub_admin';
 
   return createPortal(
     <div
@@ -276,7 +275,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({ isOpen, onCl
                         : 'bg-emerald-100 text-emerald-700 border border-emerald-200'
                     }`}
                   >
-                    {currentUser.role === 'super_admin' || isMasterAdminEmail(currentUser.email)
+                    {currentUser.role === 'super_admin'
                       ? 'Super Admin'
                       : currentUser.role === 'admin'
                       ? 'Store Admin'
@@ -705,7 +704,7 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({ isOpen, onCl
                               Administrative Dashboard Access
                             </h4>
                             <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-purple-200 text-purple-900 border border-purple-300 shadow-2xs shrink-0">
-                              {currentUser.role === 'super_admin' || isMasterAdminEmail(currentUser.email)
+                              {currentUser.role === 'super_admin'
                                 ? 'Super Admin'
                                 : currentUser.role === 'admin'
                                 ? 'Store Admin'

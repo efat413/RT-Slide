@@ -36,7 +36,7 @@ import {
   DEFAULT_SUB_ADMIN_PERMISSIONS,
   type PermissionKey,
 } from '../../server/permissions';
-import { isMasterAdminEmail, type UserAccount, type UserRole } from '../../types';
+import { type UserAccount, type UserRole } from '../../types';
 
 interface PermissionManagementModalProps {
   targetUser: UserAccount | null;
@@ -213,18 +213,13 @@ export const PermissionManagementModal: React.FC<PermissionManagementModalProps>
   const [showUnsavedDiscardModal, setShowUnsavedDiscardModal] = useState<boolean>(false);
 
   // Authoritative Super Admin check
-  const isSuperAdmin =
-    currentUser?.role === 'super_admin' ||
-    isMasterAdminEmail(currentUser?.email);
+  const isSuperAdmin = currentUser?.role === 'super_admin';
 
   const canManageRbac = isSuperAdmin && hasPermission('permission.manage');
 
   // Prevent modifying Super Admin accounts through ordinary permission editing
   const isTargetSuperAdmin =
-    targetUser &&
-    (targetUser.role === 'super_admin' ||
-      isMasterAdminEmail(targetUser.email) ||
-      targetUser.id === 'user-admin-efat');
+    targetUser && targetUser.role === 'super_admin';
 
   // Load fresh permissions from server whenever targetUser or isOpen changes
   useEffect(() => {
