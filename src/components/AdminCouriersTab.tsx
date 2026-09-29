@@ -258,6 +258,7 @@ export const AdminCouriersTab: React.FC<AdminCouriersTabProps> = ({
       const res = await testCourierWebhook({
         url: w.url,
         secret: w.secret,
+        webhookId: w.id,
         event: 'courier.added',
         courier: {
           id: 'courier-sample-test',

@@ -334,7 +334,7 @@ interface StoreContextType {
   addCourierWebhook: (webhook: Omit<CourierWebhookConfig, 'id' | 'createdAt'>) => Promise<CourierWebhookConfig>;
   updateCourierWebhook: (id: string, updates: Partial<CourierWebhookConfig>) => Promise<void>;
   deleteCourierWebhook: (id: string) => Promise<void>;
-  testCourierWebhook: (params: { url: string; secret?: string; event?: string; courier?: any }) => Promise<{ success: boolean; status?: number; latencyMs?: number; responsePreview?: string; error?: string }>;
+  testCourierWebhook: (params: { url: string; secret?: string; webhookId?: string; event?: string; courier?: any }) => Promise<{ success: boolean; status?: number; latencyMs?: number; responsePreview?: string; error?: string }>;
   triggerCourierWebhooks: (event: string, courier: any) => Promise<{ success: boolean; dispatchedCount: number; results: any[] }>;
   clearCourierWebhookLogs: () => void;
 
@@ -3004,7 +3004,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           'X-Webhook-Event': event,
           'X-Webhook-Timestamp': new Date().toISOString(),
         };
-        if (target.secret) headers['X-Webhook-Secret'] = target.secret;
+        if (target.secret && target.secret !== '••••••••' && !target.secret.startsWith('****')) {
+          headers['X-Webhook-Secret'] = target.secret;
+        }
 
         const res = await fetch(target.url, {
           method: 'POST',
@@ -3120,6 +3122,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const testCourierWebhook = async (params: {
     url: string;
     secret?: string;
+    webhookId?: string;
     event?: string;
     courier?: any;
   }): Promise<{ success: boolean; status?: number; latencyMs?: number; responsePreview?: string; error?: string }> => {

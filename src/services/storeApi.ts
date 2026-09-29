@@ -628,6 +628,7 @@ export const courierWebhooksApi = {
   async test(params: {
     url: string;
     secret?: string;
+    webhookId?: string;
     event?: string;
     courier?: any;
     payload?: any;

@@ -56,13 +56,13 @@ function isValidSpaRoute(pathname: string): boolean {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx?: any): Promise<Response> {
     const url = new URL(request.url);
     const secHeaders = getSecurityHeaders();
 
     // 1. API router
     if (url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request, env);
+      return handleApiRequest(request, env, ctx);
     }
 
     // 2. Technical SEO: robots.txt

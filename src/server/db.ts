@@ -901,11 +901,30 @@ export function controlledMergeSettings(current: StoreSettings, updates: Partial
       : [];
   }
 
-  // Controlled merge for courierWebhooks array:
+  // Controlled merge for courierWebhooks array (preserve stored secrets if client submits masked asterisks):
   if (updates.courierWebhooks !== undefined) {
-    merged.courierWebhooks = Array.isArray(updates.courierWebhooks)
-      ? [...updates.courierWebhooks]
-      : [];
+    if (Array.isArray(updates.courierWebhooks)) {
+      const existingMap = new Map<string, string>();
+      if (Array.isArray(current.courierWebhooks)) {
+        for (const w of current.courierWebhooks) {
+          if (w.id && w.secret) {
+            existingMap.set(w.id, w.secret);
+          }
+        }
+      }
+      merged.courierWebhooks = updates.courierWebhooks.map((w: any) => {
+        let secret = w.secret;
+        if (secret === '••••••••' || (typeof secret === 'string' && secret.startsWith('****')) || (secret === undefined && w.hasSecret)) {
+          secret = existingMap.get(w.id) || undefined;
+        }
+        return {
+          ...w,
+          secret: secret ? String(secret).trim() : undefined,
+        };
+      });
+    } else {
+      merged.courierWebhooks = [];
+    }
   }
 
   return merged;

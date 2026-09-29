@@ -191,6 +191,16 @@ export function isLegacyPlaintextPassword(storedHashOrPassword: string): boolean
 }
 
 /**
+ * Computes a cryptographically secure 256-bit password signature (digest)
+ * for session invalidation.
+ */
+export async function computePasswordSignature(passwordHash: string): Promise<string> {
+  if (!passwordHash) return '';
+  const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(passwordHash));
+  return bufferToHex(hashBuf).slice(0, 32);
+}
+
+/**
  * Creates an HMAC-SHA256 signed JWT-like authorization token.
  */
 export async function createAuthToken(

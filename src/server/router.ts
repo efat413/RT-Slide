@@ -88,6 +88,7 @@ import {
   getAuthSecret,
   resolveAuthSecret,
   bufferToHex,
+  computePasswordSignature,
   TokenPayload,
 } from './auth';
 import {
@@ -575,13 +576,20 @@ async function requireAuth(
   }
 
   // Session Invalidation: If user has a password hash in D1 and token carries pwdSig, verify it matches
-  if (dbUser.password && tokenUser.pwdSig && tokenUser.pwdSig !== dbUser.password.slice(0, 16)) {
-    return {
-      errorResponse: jsonResponse(
-        { success: false, error: 'Unauthorized: Session invalidated or password was changed. Please log in again.' },
-        401
-      ),
-    };
+  if (dbUser.password && tokenUser.pwdSig) {
+    const expectedSig = await computePasswordSignature(dbUser.password);
+    const isSigValid = tokenUser.pwdSig.length === 16
+      ? tokenUser.pwdSig === dbUser.password.slice(0, 16)
+      : tokenUser.pwdSig === expectedSig;
+
+    if (!isSigValid) {
+      return {
+        errorResponse: jsonResponse(
+          { success: false, error: 'Unauthorized: Session invalidated or password was changed. Please log in again.' },
+          401
+        ),
+      };
+    }
   }
 
   // Session Invalidation: Check for critical role change
@@ -687,6 +695,22 @@ function requireSuperAdmin(auth: AuthContext): Response | null {
 }
 
 /**
+ * Masks webhook secrets in courier webhook configs so credentials are never exposed to browser
+ */
+export function maskCourierWebhooks(webhooks: any[]): any[] {
+  if (!Array.isArray(webhooks)) return [];
+  return webhooks.map((w) => {
+    if (!w || typeof w !== 'object') return w;
+    const hasSec = Boolean(w.secret || w.hasSecret);
+    return {
+      ...w,
+      secret: hasSec ? '••••••••' : undefined,
+      hasSecret: hasSec,
+    };
+  });
+}
+
+/**
  * Masks internal secrets in settings for authorized admin responses
  */
 function maskSettings(
@@ -735,9 +759,13 @@ function maskSettings(
   if (canViewCourierCredentials) {
     safeAdminSettings.steadfastApiKey = settings.steadfastApiKey ? '••••••••' : '';
     safeAdminSettings.steadfastSecretKey = settings.steadfastSecretKey ? '••••••••' : '';
+    if (Array.isArray(settings.courierWebhooks)) {
+      safeAdminSettings.courierWebhooks = maskCourierWebhooks(settings.courierWebhooks);
+    }
   } else {
     delete (safeAdminSettings as any).steadfastApiKey;
     delete (safeAdminSettings as any).steadfastSecretKey;
+    delete (safeAdminSettings as any).courierWebhooks;
   }
   return safeAdminSettings;
 }
@@ -947,7 +975,7 @@ async function sendPasswordResetEmail(
 /**
  * Handles all /api/* requests inside Cloudflare Worker or Cloudflare Pages Functions
  */
-export async function handleApiRequest(request: Request, env: Env): Promise<Response> {
+export async function handleApiRequest(request: Request, env: Env, ctx?: any): Promise<Response> {
   activeApiRequest = request;
   activeEnv = env;
   const url = new URL(request.url);
@@ -1132,7 +1160,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           userId: userRow.id,
           email: userRow.email,
           role: userRow.role,
-          pwdSig: (userRow.password || '').slice(0, 16),
+          pwdSig: await computePasswordSignature(userRow.password || ''),
         },
         secret
       );
@@ -1239,7 +1267,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           userId: newCustomer.id,
           email: newCustomer.email,
           role: 'customer',
-          pwdSig: (createdRow?.password || '').slice(0, 16),
+          pwdSig: await computePasswordSignature(createdRow?.password || ''),
         },
         secret
       );
@@ -1348,10 +1376,15 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       const appUrl = resolveAppUrl(env, request.url);
       const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
 
-      // 5. Send password-reset email to the exact registered email address
-      const emailResult = await sendPasswordResetEmail(env, user.email, resetUrl);
-      if (!emailResult.success) {
-        console.error('[Auth Diagnostics] resend_failure: Failed to dispatch password reset email.');
+      // 5. Send password-reset email to the exact registered email address asynchronously
+      const emailPromise = sendPasswordResetEmail(env, user.email, resetUrl).catch((err) => {
+        console.error('[Auth Diagnostics] resend_failure: Failed to dispatch password reset email.', err);
+      });
+
+      if (ctx && typeof ctx.waitUntil === 'function') {
+        ctx.waitUntil(emailPromise);
+      } else {
+        void emailPromise;
       }
 
       return jsonResponse(genericSuccessResponse, 200);
@@ -1519,7 +1552,7 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
 
     // Fetch updated user to obtain fresh password signature
     const updatedUserRow = await getUserByEmailOrUsername(env.DB, auth!.dbUser.email);
-    const newPwdSig = (updatedUserRow?.password || '').slice(0, 16);
+    const newPwdSig = await computePasswordSignature(updatedUserRow?.password || '');
 
     // Issue fresh token so the current session continues uninterrupted
     const secret = await resolveAuthSecret(env);
@@ -2622,6 +2655,24 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
           delete updates.role;
           delete updates.permissions;
           delete updates.permissions_json;
+        }
+
+        // Security Control: Self-service password or email modification requires current password verification
+        if (isSelf && (updates.password || (updates.email && updates.email !== auth!.dbUser.email))) {
+          const currentPassword = String(body.currentPassword || body.current_password || '').trim();
+          if (!currentPassword) {
+            return jsonResponse(
+              { success: false, error: 'Current password confirmation is required to change your password or email.' },
+              400
+            );
+          }
+          const isCurrentValid = await verifyPassword(currentPassword, auth!.dbUser.password || '');
+          if (!isCurrentValid) {
+            return jsonResponse(
+              { success: false, error: 'Current password does not match.' },
+              400
+            );
+          }
         }
 
         // Prevent unauthorized escalation of role to super_admin
@@ -3905,18 +3956,26 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
   // 9B. COURIER WEBHOOKS ROUTES
   // ==========================================
   if (path === '/api/courier/webhooks' && method === 'GET') {
+    const { auth, errorResponse } = await requireAuth(request, env);
+    if (errorResponse) return errorResponse;
+    const canManage = auth!.role === 'super_admin' || hasPermission(auth!, 'courier.configure') || hasPermission(auth!, 'settings.manage');
+    if (!canManage) {
+      return jsonResponse({ success: false, error: 'Forbidden: Permission required to view courier webhooks.', requiredPermission: 'courier.configure' }, 403);
+    }
+
     try {
       const settings = await getStoreSettings(env.DB);
+      const rawWebhooks = Array.isArray(settings.courierWebhooks) ? settings.courierWebhooks : [];
       return jsonResponse({
         success: true,
-        webhooks: Array.isArray(settings.courierWebhooks) ? settings.courierWebhooks : [],
+        webhooks: maskCourierWebhooks(rawWebhooks),
       });
     } catch (err: any) {
       return jsonResponse({ success: false, error: err?.message || 'Failed to load courier webhooks' }, 500);
     }
   }
 
-  if (path === '/api/courier/webhooks' && method === 'POST') {
+  if (path === '/api/courier/webhooks' && (method === 'POST' || method === 'PUT')) {
     const { auth, errorResponse } = await requireAuth(request, env);
     if (errorResponse) return errorResponse;
     const canManage = auth!.role === 'super_admin' || hasPermission(auth!, 'courier.configure') || hasPermission(auth!, 'settings.manage');
@@ -3930,12 +3989,54 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       const updated = await updateStoreSettingsInD1(env.DB, { courierWebhooks: webhooks });
       return jsonResponse({
         success: true,
-        webhooks: updated.courierWebhooks || [],
+        webhooks: maskCourierWebhooks(updated.courierWebhooks || []),
         message: 'Courier webhooks saved successfully.',
       });
     } catch (err: any) {
       return jsonResponse({ success: false, error: err?.message || 'Failed to save courier webhooks' }, 500);
     }
+  }
+
+  if ((path === '/api/courier/webhooks' || path.startsWith('/api/courier/webhooks/')) && method === 'DELETE') {
+    const { auth, errorResponse } = await requireAuth(request, env);
+    if (errorResponse) return errorResponse;
+    const canManage = auth!.role === 'super_admin' || hasPermission(auth!, 'courier.configure') || hasPermission(auth!, 'settings.manage');
+    if (!canManage) {
+      return jsonResponse({ success: false, error: 'Forbidden: Permission required to delete courier webhooks.', requiredPermission: 'courier.configure' }, 403);
+    }
+
+    try {
+      const idToDelete = path.startsWith('/api/courier/webhooks/') ? path.replace('/api/courier/webhooks/', '').trim() : '';
+      const body = (await request.json().catch(() => ({}))) as any;
+      const targetId = idToDelete || body?.id;
+
+      const existingSettings = await getStoreSettings(env.DB);
+      const existingWebhooks = Array.isArray(existingSettings.courierWebhooks) ? existingSettings.courierWebhooks : [];
+      const filtered = targetId ? existingWebhooks.filter((w) => w.id !== targetId) : [];
+      const updated = await updateStoreSettingsInD1(env.DB, { courierWebhooks: filtered });
+
+      return jsonResponse({
+        success: true,
+        webhooks: maskCourierWebhooks(updated.courierWebhooks || []),
+        message: 'Courier webhook deleted successfully.',
+      });
+    } catch (err: any) {
+      return jsonResponse({ success: false, error: err?.message || 'Failed to delete courier webhook' }, 500);
+    }
+  }
+
+  if (path === '/api/courier/webhooks/logs' && method === 'GET') {
+    const { auth, errorResponse } = await requireAuth(request, env);
+    if (errorResponse) return errorResponse;
+    const canManage = auth!.role === 'super_admin' || hasPermission(auth!, 'courier.configure') || hasPermission(auth!, 'settings.manage');
+    if (!canManage) {
+      return jsonResponse({ success: false, error: 'Forbidden: Permission required to view courier webhook logs.', requiredPermission: 'courier.configure' }, 403);
+    }
+
+    return jsonResponse({
+      success: true,
+      logs: [],
+    });
   }
 
   if (path === '/api/courier/webhooks/test' && method === 'POST') {
@@ -3949,8 +4050,20 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
     try {
       const body = (await request.json().catch(() => ({}))) as any;
       const targetUrl = (body?.url || '').trim();
-      const secret = (body?.secret || '').trim();
+      let secret = (body?.secret || '').trim();
       const eventName = body?.event || 'courier.added';
+
+      const settings = await getStoreSettings(env.DB);
+      if (!secret || secret === '••••••••' || secret.startsWith('****')) {
+        const webhookId = body?.webhookId;
+        if (webhookId && Array.isArray(settings.courierWebhooks)) {
+          const dbW = settings.courierWebhooks.find((w: any) => w.id === webhookId);
+          if (dbW?.secret) secret = dbW.secret.trim();
+        } else if (targetUrl && Array.isArray(settings.courierWebhooks)) {
+          const dbW = settings.courierWebhooks.find((w: any) => w.url === targetUrl);
+          if (dbW?.secret) secret = dbW.secret.trim();
+        }
+      }
 
       // 1. SSRF Validation: Reject internal addresses, private IPs, loopback, cloud metadata, and illegal protocols
       const validation = validateWebhookDestination(targetUrl, request.url);
@@ -3964,7 +4077,6 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
         );
       }
 
-      const settings = await getStoreSettings(env.DB);
       const testPayload = body?.payload || {
         event: eventName,
         action: 'test_ping',
@@ -4081,7 +4193,12 @@ export async function handleApiRequest(request: Request, env: Env): Promise<Resp
       const targetList: { url: string; secret?: string; webhookId?: string; name: string }[] = [];
       for (const w of activeWebhooks) {
         if (w.url && typeof w.url === 'string' && w.url.trim()) {
-          targetList.push({ url: w.url.trim(), secret: w.secret, webhookId: w.id, name: w.name });
+          let realSecret = w.secret;
+          if (!realSecret || realSecret === '••••••••' || (typeof realSecret === 'string' && realSecret.startsWith('****'))) {
+            const dbW = (settings.courierWebhooks || []).find((x: any) => x.id === w.id);
+            realSecret = dbW?.secret;
+          }
+          targetList.push({ url: w.url.trim(), secret: realSecret, webhookId: w.id, name: w.name });
         }
       }
 

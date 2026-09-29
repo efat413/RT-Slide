@@ -346,11 +346,25 @@ function localApiDevPlugin(): Plugin {
     };
   };
 
+  const maskDevCourierWebhooks = (webhooks: any[]): any[] => {
+    if (!Array.isArray(webhooks)) return [];
+    return webhooks.map((w) => {
+      if (!w || typeof w !== 'object') return w;
+      const hasSec = Boolean(w.secret || w.hasSecret);
+      return {
+        ...w,
+        secret: hasSec ? '••••••••' : undefined,
+        hasSecret: hasSec,
+      };
+    });
+  };
+
   const maskDevSettings = (settings: any, isAuthenticatedAdmin: boolean, canViewCourierCredentials: boolean = false) => {
     if (!isAuthenticatedAdmin) {
       const {
         steadfastApiKey,
         steadfastSecretKey,
+        courierWebhooks,
         ...safeSettings
       } = settings;
       return safeSettings;
@@ -359,9 +373,13 @@ function localApiDevPlugin(): Plugin {
     if (canViewCourierCredentials) {
       safeAdminSettings.steadfastApiKey = settings.steadfastApiKey ? '••••••••' : '';
       safeAdminSettings.steadfastSecretKey = settings.steadfastSecretKey ? '••••••••' : '';
+      if (Array.isArray(settings.courierWebhooks)) {
+        safeAdminSettings.courierWebhooks = maskDevCourierWebhooks(settings.courierWebhooks);
+      }
     } else {
       delete safeAdminSettings.steadfastApiKey;
       delete safeAdminSettings.steadfastSecretKey;
+      delete safeAdminSettings.courierWebhooks;
     }
     return safeAdminSettings;
   };
@@ -1677,6 +1695,23 @@ function localApiDevPlugin(): Plugin {
                 if (updates.steadfastSecretKey === '••••••••' || updates.steadfastSecretKey?.startsWith('****')) {
                   updates.steadfastSecretKey = devSettings.steadfastSecretKey;
                 }
+                if (Array.isArray(updates.courierWebhooks)) {
+                  const existingMap = new Map<string, string>();
+                  for (const w of devCourierWebhooks) {
+                    if (w.id && w.secret) existingMap.set(w.id, w.secret);
+                  }
+                  updates.courierWebhooks = updates.courierWebhooks.map((w: any) => {
+                    let secret = w.secret;
+                    if (secret === '••••••••' || (typeof secret === 'string' && secret.startsWith('****')) || (secret === undefined && w.hasSecret)) {
+                      secret = existingMap.get(w.id) || undefined;
+                    }
+                    return {
+                      ...w,
+                      secret: secret ? String(secret).trim() : undefined,
+                    };
+                  });
+                  devCourierWebhooks = updates.courierWebhooks;
+                }
 
                 devSettings = {
                   ...devSettings,
@@ -1944,6 +1979,17 @@ function localApiDevPlugin(): Plugin {
                 delete updates.role;
                 delete updates.permissions;
                 delete updates.permissions_json;
+              }
+              // Security Control: Self-service password or email modification requires current password verification
+              if (isSelf && (updates.password || (updates.email && updates.email !== authResult.auth!.user.email))) {
+                const currentPassword = String(body.currentPassword || body.current_password || '').trim();
+                if (!currentPassword) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password confirmation is required to change your password or email.' } });
+                }
+                const isMatch = targetUser.password ? currentPassword === targetUser.password : true;
+                if (!isMatch) {
+                  return sendDevError(res, { status: 400, body: { success: false, error: 'Current password does not match.' } });
+                }
               }
               if (updates.role === 'super_admin' && authResult.auth!.role !== 'super_admin') {
                 return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Cannot promote account to Super Administrator.' } });
@@ -3057,10 +3103,17 @@ function localApiDevPlugin(): Plugin {
 
         // COURIER WEBHOOKS (DEV MODE)
         if (url.pathname === '/api/courier/webhooks' && method === 'GET') {
+          const authResult = requireDevAuth(req);
+          if (authResult.error) return sendDevError(res, authResult.error);
+          const canManage = authResult.auth!.role === 'super_admin' || hasDevPermission(authResult.auth!, 'courier.configure') || hasDevPermission(authResult.auth!, 'settings.manage');
+          if (!canManage) {
+            return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Courier configuration permission required.' } });
+          }
+
           res.statusCode = 200;
           return res.end(JSON.stringify({
             success: true,
-            webhooks: devCourierWebhooks,
+            webhooks: maskDevCourierWebhooks(devCourierWebhooks),
           }));
         }
 
@@ -3084,7 +3137,22 @@ function localApiDevPlugin(): Plugin {
               return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Courier configuration permission required.' } });
             }
 
-            const list = Array.isArray(body?.webhooks) ? body.webhooks : [];
+            const incoming = Array.isArray(body?.webhooks) ? body.webhooks : [];
+            const existingMap = new Map<string, string>();
+            for (const w of devCourierWebhooks) {
+              if (w.id && w.secret) existingMap.set(w.id, w.secret);
+            }
+            const list = incoming.map((w: any) => {
+              let secret = w.secret;
+              if (secret === '••••••••' || (typeof secret === 'string' && secret.startsWith('****')) || (secret === undefined && w.hasSecret)) {
+                secret = existingMap.get(w.id) || undefined;
+              }
+              return {
+                ...w,
+                secret: secret ? String(secret).trim() : undefined,
+              };
+            });
+
             devCourierWebhooks = list;
             devSettings.courierWebhooks = list;
             try {
@@ -3094,8 +3162,37 @@ function localApiDevPlugin(): Plugin {
             res.statusCode = 200;
             return res.end(JSON.stringify({
               success: true,
-              webhooks: devCourierWebhooks,
+              webhooks: maskDevCourierWebhooks(devCourierWebhooks),
               message: 'Courier webhooks saved successfully.',
+            }));
+          });
+        }
+
+        if ((url.pathname === '/api/courier/webhooks' || url.pathname.startsWith('/api/courier/webhooks/')) && method === 'DELETE') {
+          const authResult = requireDevAuth(req);
+          if (authResult.error) return sendDevError(res, authResult.error);
+          const canManage = authResult.auth!.role === 'super_admin' || hasDevPermission(authResult.auth!, 'courier.configure') || hasDevPermission(authResult.auth!, 'settings.manage');
+          if (!canManage) {
+            return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Courier configuration permission required.' } });
+          }
+
+          const targetId = url.pathname.startsWith('/api/courier/webhooks/')
+            ? url.pathname.replace('/api/courier/webhooks/', '').trim()
+            : '';
+
+          return readBody((body) => {
+            const idToDelete = targetId || body?.id;
+            devCourierWebhooks = idToDelete ? devCourierWebhooks.filter((w: any) => w.id !== idToDelete) : [];
+            devSettings.courierWebhooks = devCourierWebhooks;
+            try {
+              fs.writeFileSync(SETTINGS_FILE, JSON.stringify(devSettings, null, 2), 'utf-8');
+            } catch {}
+
+            res.statusCode = 200;
+            return res.end(JSON.stringify({
+              success: true,
+              webhooks: maskDevCourierWebhooks(devCourierWebhooks),
+              message: 'Courier webhook deleted successfully.',
             }));
           });
         }
@@ -3392,6 +3489,13 @@ function localApiDevPlugin(): Plugin {
         }
 
         if (url.pathname === '/api/courier/webhooks/logs' && method === 'GET') {
+          const authResult = requireDevAuth(req);
+          if (authResult.error) return sendDevError(res, authResult.error);
+          const canManage = authResult.auth!.role === 'super_admin' || hasDevPermission(authResult.auth!, 'courier.configure') || hasDevPermission(authResult.auth!, 'settings.manage');
+          if (!canManage) {
+            return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Courier configuration permission required.' } });
+          }
+
           res.statusCode = 200;
           return res.end(JSON.stringify({
             success: true,

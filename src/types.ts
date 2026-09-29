@@ -94,7 +94,8 @@ export interface CourierWebhookConfig {
   id: string;
   name: string; // e.g. "Zapier Courier Alert", "Slack / Discord Dispatch Bot"
   url: string; // HTTP / HTTPS POST endpoint
-  secret?: string; // Optional token / signature secret
+  secret?: string; // Optional token / signature secret (masked on client)
+  hasSecret?: boolean; // Indicates whether a webhook secret is configured
   events: ('courier.added' | 'courier.updated' | 'courier.deleted' | 'courier.dispatched' | string)[];
   isActive: boolean;
   createdAt: string;
