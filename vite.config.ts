@@ -266,7 +266,8 @@ function localApiDevPlugin(): Plugin {
           }
         }
 
-        const role = foundUser.role || decoded.role || 'customer';
+        // RBAC Security: Role is strictly derived from the verified user record, never from client claims
+        const role = foundUser.role || 'customer';
         const rawPermissions = (foundUser as any).permissions_json || foundUser.permissions;
         const granularPermissions = resolveUserPermissions(role, rawPermissions);
         const legacyPermissions = generateLegacyPermissionFlags(granularPermissions);
@@ -923,6 +924,7 @@ function localApiDevPlugin(): Plugin {
               success: true,
               message: 'Authentication successful',
               user: formatDevUserResponse(foundUser),
+              token: devToken,
             }));
           });
         }
@@ -4151,7 +4153,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      host: '0.0.0.0',
+      host: process.env.VITE_HOST || (process.env.K_SERVICE || process.env.CONTAINER ? '0.0.0.0' : 'localhost'),
       port: 3000,
       allowedHosts: true as const,
       hmr: process.env.DISABLE_HMR !== 'true',

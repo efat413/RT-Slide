@@ -304,16 +304,17 @@ function extractTokenFromRequest(request: Request): string | null {
 }
 
 /**
- * Helper to determine if running in a local development/testing environment
+ * Helper to determine if running in a local development/testing environment.
+ * Strict fail-closed: Never infers development mode from missing DB bindings.
  */
 export function isDevEnvironment(env?: any): boolean {
-  if (env?.DEV) return true;
+  if (env?.DEV === true) return true;
   if (typeof process !== 'undefined' && process.env) {
     if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
       return true;
     }
   }
-  return !env?.DB;
+  return false;
 }
 
 /**
@@ -533,6 +534,17 @@ async function requireAuth(
     return {
       errorResponse: jsonResponse(
         { success: false, error: 'Unauthorized: Authentication required.' },
+        401
+      ),
+    };
+  }
+
+  // Security Hardening: Development-only tokens (dev-jwt-*) are strictly rejected by the server router.
+  // Production authentication MUST ALWAYS use full cryptographic HMAC-SHA256 verification.
+  if (token.startsWith('dev-jwt-') || token.startsWith('dev-') || !token.includes('.')) {
+    return {
+      errorResponse: jsonResponse(
+        { success: false, error: 'Unauthorized: Invalid or expired session token.' },
         401
       ),
     };

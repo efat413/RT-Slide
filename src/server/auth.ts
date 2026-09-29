@@ -285,11 +285,37 @@ async function verifyTokenSignature(
  * Validates strictly against the authoritative Worker secret.
  * Production environments strictly use only the configured ADMIN_SECRET.
  * Fails closed without D1 or runtime fallback secrets.
+ *
+ * CRITICAL SECURITY GUARANTEE:
+ * Development-only tokens (such as `dev-jwt-*`) are strictly rejected in all server paths.
+ * Production authentication MUST ALWAYS use full cryptographic HMAC-SHA256 signature verification.
+ * Under NO circumstances can any request header, query parameter, cookie, or payload
+ * bypass cryptographic signature verification or activate unverified development tokens.
  */
 export async function verifyAuthToken(
   token: string,
   secret: string,
   _env?: { DB?: any }
 ): Promise<TokenPayload | null> {
-  return verifyTokenSignature(token, secret);
+  if (!token || typeof token !== 'string') return null;
+
+  const trimmedToken = token.trim();
+
+  // Strict check: Instantly reject any development token prefixes or non-JWT formats
+  if (
+    trimmedToken.startsWith('dev-jwt-') ||
+    trimmedToken.startsWith('dev-') ||
+    trimmedToken.startsWith('mock-') ||
+    !trimmedToken.includes('.')
+  ) {
+    return null;
+  }
+
+  // Must have exactly 3 dot-separated Base64Url parts (Header.Payload.Signature)
+  const parts = trimmedToken.split('.');
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  return verifyTokenSignature(trimmedToken, secret);
 }
