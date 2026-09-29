@@ -4,6 +4,7 @@ import {
   // Products
   getAllProducts,
   getPaginatedProducts,
+  getHomepageProducts,
   getProductById,
   insertProduct,
   updateProductInD1,
@@ -1369,6 +1370,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       };
 
       if (!user || !user.email) {
+        // Perform simulated cryptographic digest to prevent timing analysis
         // Case 2 — Account does NOT exist: Perform matched dummy operations to eliminate timing analysis
         const dummyTokenBytes = new Uint8Array(32);
         crypto.getRandomValues(dummyTokenBytes);
@@ -1807,31 +1809,31 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
   // ==========================================
   if (path === '/api/store/homepage' && (method === 'GET' || method === 'HEAD')) {
     try {
-      const [rawSettings, categories, sliders, allActiveProducts] = await Promise.all([
+      const [rawSettings, categories, sliders] = await Promise.all([
         getStoreSettings(env.DB),
         getAllCategories(env.DB),
         getAllSliders(env.DB),
-        getAllProducts(env.DB, { includeInactive: false }),
       ]);
 
       const safeSettings = maskSettings(rawSettings, false, false);
       const activeSliders = sliders;
 
-      const safeProducts = allActiveProducts.map((p) =>
-        sanitizeProductForRole(p, { isSuperAdmin: false, canViewBuyingPrice: false, canViewProfit: false })
-      );
+      const categoryIds = (categories || []).map((c) => c.id);
+      const homepageData = await getHomepageProducts(env.DB, categoryIds, {
+        perCategoryLimit: 6,
+        featuredLimit: 8,
+      });
 
-      const categoryProducts: Record<string, any[]> = {};
-      const collectedProducts: any[] = [];
+      const sanitizePublic = (p: any) =>
+        sanitizeProductForRole(p, { isSuperAdmin: false, canViewBuyingPrice: false, canViewProfit: false });
 
-      for (const cat of categories) {
-        const catProds = safeProducts.filter((p) => p.categoryId === cat.id).slice(0, 6);
-        categoryProducts[cat.id] = catProds;
-        collectedProducts.push(...catProds);
+      const safeCategoryProducts: Record<string, any[]> = {};
+      for (const [catId, prods] of Object.entries(homepageData.categoryProducts)) {
+        safeCategoryProducts[catId] = prods.map(sanitizePublic);
       }
 
-      const featuredProducts = safeProducts.filter((p) => p.featured || (p as any).isFeatured).slice(0, 8);
-      const uniqueProducts = Array.from(new Map(collectedProducts.map((p) => [p.id, p])).values());
+      const safeFeaturedProducts = homepageData.featuredProducts.map(sanitizePublic);
+      const safeUniqueProducts = homepageData.uniqueProducts.map(sanitizePublic);
 
       return jsonResponse(
         {
@@ -1839,9 +1841,9 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           settings: safeSettings,
           categories,
           slides: activeSliders,
-          categoryProducts,
-          featuredProducts,
-          products: uniqueProducts,
+          categoryProducts: safeCategoryProducts,
+          featuredProducts: safeFeaturedProducts,
+          products: safeUniqueProducts,
         },
         200,
         {
@@ -2471,38 +2473,109 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         } catch {}
       }
 
+      let rawBuffer: Uint8Array | null = null;
+      let contentType = 'image/jpeg';
+
       const r2Bucket = env.R2 || env.BUCKET;
       if (r2Bucket) {
         const obj = await r2Bucket.get(key);
         if (obj) {
-          const contentType = obj.httpMetadata?.contentType || 'image/jpeg';
-          return new Response(obj.body, {
-            headers: {
-              ...getSafeMediaHeaders(contentType),
-              ...getCorsHeaders(request, env),
-            },
-          });
+          contentType = obj.httpMetadata?.contentType || 'image/jpeg';
+          if (typeof (obj as any).arrayBuffer === 'function') {
+            const ab = await (obj as any).arrayBuffer();
+            rawBuffer = new Uint8Array(ab);
+          } else if (obj.body) {
+            const reader = (obj.body as ReadableStream).getReader();
+            const chunks: Uint8Array[] = [];
+            let total = 0;
+            while (true) {
+              const { done, value } = await reader.read();
+              if (done) break;
+              if (value) {
+                chunks.push(value);
+                total += value.length;
+              }
+            }
+            rawBuffer = new Uint8Array(total);
+            let offset = 0;
+            for (const chunk of chunks) {
+              rawBuffer.set(chunk, offset);
+              offset += chunk.length;
+            }
+          }
         }
       }
 
       // Check D1 media_assets table
-      const asset = await getMediaAssetFromD1(env.DB, key);
-      if (asset) {
-        const raw = atob(asset.dataBase64);
-        const u8 = new Uint8Array(raw.length);
-        for (let i = 0; i < raw.length; i++) {
-          u8[i] = raw.charCodeAt(i);
+      if (!rawBuffer) {
+        const asset = await getMediaAssetFromD1(env.DB, key);
+        if (asset) {
+          const raw = atob(asset.dataBase64);
+          rawBuffer = new Uint8Array(raw.length);
+          for (let i = 0; i < raw.length; i++) {
+            rawBuffer[i] = raw.charCodeAt(i);
+          }
+          contentType = asset.contentType || 'image/jpeg';
         }
-        const contentType = asset.contentType || 'image/jpeg';
-        return new Response(u8.buffer, {
-          headers: {
-            ...getSafeMediaHeaders(contentType),
-            ...getCorsHeaders(request, env),
-          },
-        });
       }
 
-      return new Response('Media asset not found', { status: 404 });
+      if (!rawBuffer) {
+        return new Response('Media asset not found', { status: 404 });
+      }
+
+      // If transformation was requested (?w=360, etc.)
+      if (targetWidth && targetWidth > 0 && targetWidth <= 2400) {
+        try {
+          if (typeof process !== 'undefined' && process.versions?.node) {
+            const sharpModule = await import('sharp');
+            const sharp = (sharpModule as any).default || sharpModule;
+            const accept = request.headers.get('accept') || '';
+            const wantsWebp = accept.includes('image/webp') && contentType !== 'image/gif' && contentType !== 'image/x-icon';
+
+            let pipeline = sharp(Buffer.from(rawBuffer)).resize(targetWidth, null, {
+              withoutEnlargement: true,
+              fit: 'inside',
+            });
+
+            if (wantsWebp) {
+              const webpBuffer = await pipeline.webp({ quality: Math.min(Math.max(targetQuality, 50), 95) }).toBuffer();
+              return new Response(webpBuffer, {
+                status: 200,
+                headers: {
+                  ...getSafeMediaHeaders('image/webp'),
+                  ...getCorsHeaders(request, env),
+                  'X-Image-Transform': 'sharp-webp',
+                  'X-Image-Width': String(targetWidth),
+                  'Content-Length': String(webpBuffer.byteLength),
+                },
+              });
+            } else {
+              const resizedBuffer = await pipeline.toBuffer();
+              return new Response(resizedBuffer, {
+                status: 200,
+                headers: {
+                  ...getSafeMediaHeaders(contentType),
+                  ...getCorsHeaders(request, env),
+                  'X-Image-Transform': 'sharp-resized',
+                  'X-Image-Width': String(targetWidth),
+                  'Content-Length': String(resizedBuffer.byteLength),
+                },
+              });
+            }
+          }
+        } catch (resizeErr) {
+          console.warn('Image resizing fallback error:', resizeErr);
+        }
+      }
+
+      return new Response(rawBuffer.buffer, {
+        status: 200,
+        headers: {
+          ...getSafeMediaHeaders(contentType),
+          ...getCorsHeaders(request, env),
+          'Content-Length': String(rawBuffer.byteLength),
+        },
+      });
     } catch (err: any) {
       console.error('[Media Retrieval Error]', err);
       return new Response('Error retrieving media asset.', { status: 500, headers: getCorsHeaders(request) });

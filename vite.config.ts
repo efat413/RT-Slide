@@ -1474,26 +1474,31 @@ function localApiDevPlugin(): Plugin {
         if (url.pathname === '/api/store/homepage' && (method === 'GET' || method === 'HEAD')) {
           const safeSettings = maskDevSettings(devSettings, false, false);
           const activeSliders = [...devSliders];
-          const safeActiveProducts = devProducts
-            .filter((p: any) => p.status !== 'inactive' && !p.isDeleted)
-            .map((p: any) => sanitizeDevProduct(p, false));
 
           const categoryProducts: Record<string, any[]> = {};
-          const collectedProducts: any[] = [];
+          const collectedMap = new Map<string, any>();
 
           devCategories.forEach((cat: any) => {
-            const catProds = safeActiveProducts
-              .filter((p: any) => p.categoryId === cat.id)
-              .slice(0, 6);
+            const catProds = devProducts
+              .filter((p: any) => p.status !== 'inactive' && !p.isDeleted && p.categoryId === cat.id)
+              .slice(0, 6)
+              .map((p: any) => sanitizeDevProduct(p, false));
             categoryProducts[cat.id] = catProds;
-            collectedProducts.push(...catProds);
+            catProds.forEach((p: any) => collectedMap.set(p.id, p));
           });
 
-          const featuredProducts = safeActiveProducts
-            .filter((p: any) => p.featured || p.isFeatured)
-            .slice(0, 8);
+          const featuredProducts = devProducts
+            .filter((p: any) => p.status !== 'inactive' && !p.isDeleted && (p.featured || p.isFeatured))
+            .slice(0, 8)
+            .map((p: any) => sanitizeDevProduct(p, false));
 
-          const uniqueProducts = Array.from(new Map(collectedProducts.map((p) => [p.id, p])).values());
+          featuredProducts.forEach((p: any) => {
+            if (!collectedMap.has(p.id)) {
+              collectedMap.set(p.id, p);
+            }
+          });
+
+          const uniqueProducts = Array.from(collectedMap.values());
 
           res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=60');
           res.statusCode = 200;
@@ -2905,6 +2910,8 @@ function localApiDevPlugin(): Plugin {
           if (item) {
             const widthParam = url.searchParams.get('w') || url.searchParams.get('width');
             const targetWidth = widthParam ? parseInt(widthParam, 10) : null;
+            const qualityParam = url.searchParams.get('q') || url.searchParams.get('quality');
+            const targetQuality = qualityParam ? Math.min(Math.max(parseInt(qualityParam, 10), 50), 95) : 82;
 
             if (targetWidth && targetWidth > 0 && targetWidth <= 2400) {
               try {
@@ -2919,11 +2926,14 @@ function localApiDevPlugin(): Plugin {
                 });
 
                 if (wantsWebp) {
-                  const webpBuffer = await pipeline.webp({ quality: 82 }).toBuffer();
+                  const webpBuffer = await pipeline.webp({ quality: targetQuality }).toBuffer();
                   const headers = getSafeMediaHeaders('image/webp');
                   for (const [hName, hVal] of Object.entries(headers)) {
                     res.setHeader(hName, hVal);
                   }
+                  res.setHeader('X-Image-Transform', 'sharp-webp');
+                  res.setHeader('X-Image-Width', String(targetWidth));
+                  res.setHeader('Content-Length', String(webpBuffer.length));
                   res.statusCode = 200;
                   return res.end(webpBuffer);
                 } else {
@@ -2932,6 +2942,9 @@ function localApiDevPlugin(): Plugin {
                   for (const [hName, hVal] of Object.entries(headers)) {
                     res.setHeader(hName, hVal);
                   }
+                  res.setHeader('X-Image-Transform', 'sharp-resized');
+                  res.setHeader('X-Image-Width', String(targetWidth));
+                  res.setHeader('Content-Length', String(resizedBuffer.length));
                   res.statusCode = 200;
                   return res.end(resizedBuffer);
                 }

@@ -428,6 +428,90 @@ export async function getAllProducts(
   return result.results.map(rowToProduct);
 }
 
+export interface HomepageProductsOptions {
+  perCategoryLimit?: number;
+  featuredLimit?: number;
+}
+
+export interface HomepageProductsData {
+  categoryProducts: Record<string, Product[]>;
+  featuredProducts: Product[];
+  uniqueProducts: Product[];
+}
+
+/**
+ * Loads strictly the products required for the homepage directly via SQL LIMITs and batching.
+ * Eliminates loading the entire products table into memory and avoids N+1 database queries.
+ */
+export async function getHomepageProducts(
+  db: D1Database,
+  categoryIds: string[],
+  options?: HomepageProductsOptions
+): Promise<HomepageProductsData> {
+  const perCategoryLimit = Math.min(24, Math.max(1, options?.perCategoryLimit || 6));
+  const featuredLimit = Math.min(24, Math.max(1, options?.featuredLimit || 8));
+
+  // 1. Prepare batch queries for D1 (1 round trip for all product queries)
+  const statements: D1PreparedStatement[] = [];
+
+  // Statement 0: Featured products (SQL WHERE + ORDER BY + LIMIT)
+  const featuredSql = `
+    SELECT * FROM products 
+    WHERE (status = 'active' OR status = 'published' OR status IS NULL OR status = '')
+      AND (featured = 1 OR featured = 'true')
+    ORDER BY created_at DESC 
+    LIMIT ?
+  `;
+  statements.push(db.prepare(featuredSql).bind(featuredLimit));
+
+  // Statements 1..N: Products per category (SQL WHERE + ORDER BY + LIMIT)
+  for (const catId of categoryIds) {
+    const catSql = `
+      SELECT * FROM products 
+      WHERE category_id = ? 
+        AND (status = 'active' OR status = 'published' OR status IS NULL OR status = '')
+      ORDER BY created_at DESC 
+      LIMIT ?
+    `;
+    statements.push(db.prepare(catSql).bind(catId, perCategoryLimit));
+  }
+
+  // Execute in 1 single D1 batch round trip (or concurrent fallback)
+  const batchResults = typeof db.batch === 'function'
+    ? await db.batch<ProductRow>(statements)
+    : await Promise.all(statements.map((s) => s.all<ProductRow>()));
+
+  // Process featured products
+  const featuredRows = batchResults[0]?.results || [];
+  const featuredProducts = featuredRows.map(rowToProduct);
+
+  // Process category products
+  const categoryProducts: Record<string, Product[]> = {};
+  const collectedMap = new Map<string, Product>();
+
+  categoryIds.forEach((catId, index) => {
+    const rows = batchResults[index + 1]?.results || [];
+    const prods = rows.map(rowToProduct);
+    categoryProducts[catId] = prods;
+    for (const p of prods) {
+      collectedMap.set(p.id, p);
+    }
+  });
+
+  // Also include featured products in uniqueProducts collection so quick view and details work seamlessly
+  for (const p of featuredProducts) {
+    if (!collectedMap.has(p.id)) {
+      collectedMap.set(p.id, p);
+    }
+  }
+
+  return {
+    categoryProducts,
+    featuredProducts,
+    uniqueProducts: Array.from(collectedMap.values()),
+  };
+}
+
 export async function getPaginatedProducts(
   db: D1Database,
   filter?: ProductFilter

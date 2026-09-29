@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE INDEX IF NOT EXISTS idx_products_category ON products(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_featured ON products(featured);
 CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);
+CREATE INDEX IF NOT EXISTS idx_products_category_created_at ON products(category_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_products_featured_created_at ON products(featured, created_at DESC);
 
 -- 2. CATEGORIES TABLE
 CREATE TABLE IF NOT EXISTS categories (
