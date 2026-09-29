@@ -55,6 +55,7 @@ import {
   profitAnalyticsApi,
   expensesApi,
   courierWebhooksApi,
+  storeHomepageApi,
 } from '../services/storeApi';
 import { authApi, onAuthUnauthorized } from '../services/authApi';
 import { hasUserPermission, canUser } from '../utils/permissions';
@@ -978,29 +979,100 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     try {
       setIsOrdersLoading(true);
 
-      // 1. Fetch public store data (categories, sliders, settings, coupons, reviews)
-      // These endpoints are public and must never trigger authentication checks or destroy admin sessions
-      const [
-        catsRes,
-        sldsRes,
-        sttngsRes,
-        cpnsRes,
-        revsRes,
-      ] = await Promise.allSettled([
-        categoriesApi.getAll(),
-        slidersApi.getAll(),
-        settingsApi.get(),
-        couponsApi.getAll(),
-        reviewsApi.getAll(),
-      ]);
+      // 1. Optimized Public Homepage Initial Load: Fetch all essentials in 1 consolidated request!
+      // This eliminates N+1 category-product queries and reduces initial network round trips.
+      const homepageRes = await storeHomepageApi.getHomepage();
 
       let freshCategories: Category[] = [];
-      if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value)) {
-        freshCategories = catsRes.value;
-        setCategories(freshCategories);
+
+      if (homepageRes.success && homepageRes.data) {
+        const hpData = homepageRes.data;
+        if (Array.isArray(hpData.categories)) {
+          freshCategories = hpData.categories;
+          setCategories(freshCategories);
+        }
+        if (Array.isArray(hpData.slides)) {
+          setSlides(hpData.slides);
+        }
+        if (hpData.settings) {
+          setSettings(hpData.settings);
+          try {
+            const json = JSON.stringify(hpData.settings);
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, json);
+            localStorage.setItem('rongdhonu_settings', json);
+          } catch {}
+        }
+        if (hpData.categoryProducts) {
+          setHomepageCategoryProducts(hpData.categoryProducts);
+        }
+        const loadedProducts = hpData.products || [];
+        setProducts(loadedProducts);
+        setQuickViewProduct((prev) => (prev ? loadedProducts.find((p) => p.id === prev.id) || prev : null));
+        setIsStoreError(false);
+      } else {
+        // Fallback to individual endpoints if consolidated endpoint is unavailable
+        const [catsRes, sldsRes, sttngsRes] = await Promise.allSettled([
+          categoriesApi.getAll(),
+          slidersApi.getAll(),
+          settingsApi.get(),
+        ]);
+
+        if (catsRes.status === 'fulfilled' && Array.isArray(catsRes.value)) {
+          freshCategories = catsRes.value;
+          setCategories(freshCategories);
+        }
+        if (sldsRes.status === 'fulfilled' && Array.isArray(sldsRes.value)) {
+          setSlides(sldsRes.value);
+        }
+        if (sttngsRes.status === 'fulfilled' && sttngsRes.value) {
+          setSettings(sttngsRes.value);
+          try {
+            const json = JSON.stringify(sttngsRes.value);
+            localStorage.setItem(STORAGE_KEYS.SETTINGS, json);
+            localStorage.setItem('rongdhonu_settings', json);
+          } catch {}
+        }
+
+        try {
+          const catMap: Record<string, Product[]> = {};
+          const loadedProducts: Product[] = [];
+          await Promise.all(
+            freshCategories.map(async (c) => {
+              try {
+                const catProds = await productsApi.getHomepageCategoryProducts(c.id, 6);
+                catMap[c.id] = catProds;
+                loadedProducts.push(...catProds);
+              } catch {
+                catMap[c.id] = [];
+              }
+            })
+          );
+          setHomepageCategoryProducts(catMap);
+          setProducts(loadedProducts);
+          setIsStoreError(false);
+        } catch {
+          setIsStoreError(true);
+        }
       }
 
-      // 2. Protected admin queries: ONLY fetch if admin session is verified and user has required permissions
+      // 2. Lazily load non-critical data (coupons & reviews) in the background so initial load is instant
+      setTimeout(() => {
+        couponsApi.getAll().then((cpns) => {
+          if (Array.isArray(cpns)) {
+            setCoupons(cpns);
+            try { localStorage.setItem(STORAGE_KEYS.COUPONS, JSON.stringify(cpns)); } catch {}
+          }
+        }).catch(() => {});
+
+        reviewsApi.getAll().then((revs) => {
+          if (Array.isArray(revs)) {
+            setReviews(revs);
+            try { localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(revs)); } catch {}
+          }
+        }).catch(() => {});
+      }, 1200);
+
+      // 3. Protected admin queries: ONLY fetch if admin session is verified and user has required permissions
       let usrsRes: PromiseSettledResult<UserAccount[]> | null = null;
       let ordsRes: PromiseSettledResult<{ success: boolean; orders: Order[] }> | null = null;
 
@@ -1037,61 +1109,6 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         } catch (err) {
           console.warn('Admin products sync failed:', err);
         }
-      } else {
-        // HOMEPAGE LIGHTWEIGHT LOADING:
-        // Strictly fetch only up to 6 products per category for the homepage carousel
-        // Does NOT download the full catalog. Recycled in memory.
-        try {
-          const catMap: Record<string, Product[]> = {};
-          const loadedProducts: Product[] = [];
-          await Promise.all(
-            freshCategories.map(async (c) => {
-              try {
-                const catProds = await productsApi.getHomepageCategoryProducts(c.id, 6);
-                catMap[c.id] = catProds;
-                loadedProducts.push(...catProds);
-              } catch {
-                catMap[c.id] = [];
-              }
-            })
-          );
-          setHomepageCategoryProducts(catMap);
-          setProducts(loadedProducts);
-          setQuickViewProduct((prev) => (prev ? loadedProducts.find((p) => p.id === prev.id) || prev : null));
-          setIsStoreError(false);
-        } catch (err) {
-          console.warn('Homepage category products sync failed:', err);
-          setIsStoreError(true);
-        }
-      }
-
-      if (sldsRes.status === 'fulfilled' && Array.isArray(sldsRes.value)) {
-        setSlides(sldsRes.value);
-      }
-
-      if (sttngsRes.status === 'fulfilled' && sttngsRes.value) {
-        setSettings(sttngsRes.value);
-        try {
-          const json = JSON.stringify(sttngsRes.value);
-          localStorage.setItem(STORAGE_KEYS.SETTINGS, json);
-          localStorage.setItem('rongdhonu_settings', json);
-        } catch {}
-      } else if (sttngsRes.status === 'rejected') {
-        console.warn('Store settings sync temporarily unavailable:', sttngsRes.reason);
-      }
-
-      if (cpnsRes.status === 'fulfilled' && Array.isArray(cpnsRes.value)) {
-        setCoupons(cpnsRes.value);
-        try {
-          localStorage.setItem(STORAGE_KEYS.COUPONS, JSON.stringify(cpnsRes.value));
-        } catch {}
-      }
-
-      if (revsRes.status === 'fulfilled' && Array.isArray(revsRes.value)) {
-        setReviews(revsRes.value);
-        try {
-          localStorage.setItem(STORAGE_KEYS.REVIEWS, JSON.stringify(revsRes.value));
-        } catch {}
       }
 
       if (usrsRes && usrsRes.status === 'fulfilled' && Array.isArray(usrsRes.value)) {

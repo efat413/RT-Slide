@@ -79,6 +79,54 @@ async function apiRequest<T>(url: string, options?: RequestInit, timeoutMs = 450
 }
 
 // ==========================================
+// 0. OPTIMIZED HOMEPAGE API
+// ==========================================
+export interface HomepageData {
+  settings: StoreSettings;
+  categories: Category[];
+  slides: CarouselSlide[];
+  categoryProducts: Record<string, Product[]>;
+  featuredProducts?: Product[];
+  products: Product[];
+}
+
+export const storeHomepageApi = {
+  async getHomepage(): Promise<{
+    success: boolean;
+    data?: HomepageData;
+    error?: string;
+  }> {
+    const res = await apiRequest<{
+      success: boolean;
+      settings: StoreSettings;
+      categories: Category[];
+      slides: CarouselSlide[];
+      categoryProducts: Record<string, Product[]>;
+      featuredProducts?: Product[];
+      products: Product[];
+    }>(`${API_BASE}/store/homepage`);
+
+    if (res.success && res.data) {
+      return {
+        success: true,
+        data: {
+          settings: res.data.settings,
+          categories: res.data.categories,
+          slides: res.data.slides,
+          categoryProducts: res.data.categoryProducts,
+          featuredProducts: res.data.featuredProducts,
+          products: res.data.products,
+        },
+      };
+    }
+    return {
+      success: false,
+      error: res.error || 'Failed to fetch homepage data',
+    };
+  },
+};
+
+// ==========================================
 // 1. PRODUCTS API
 // ==========================================
 export const productsApi = {

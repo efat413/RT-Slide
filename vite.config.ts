@@ -1466,6 +1466,46 @@ function localApiDevPlugin(): Plugin {
           return res.end(JSON.stringify({ success: true, count: devAuditLogs.length, logs: devAuditLogs }));
         }
 
+        // 0. OPTIMIZED PUBLIC HOMEPAGE CONSOLIDATED ROUTE
+        if (url.pathname === '/api/store/homepage' && (method === 'GET' || method === 'HEAD')) {
+          const safeSettings = maskDevSettings(devSettings, false, false);
+          const activeSliders = [...devSliders];
+          const safeActiveProducts = devProducts
+            .filter((p: any) => p.status !== 'inactive' && !p.isDeleted)
+            .map((p: any) => sanitizeDevProduct(p, false));
+
+          const categoryProducts: Record<string, any[]> = {};
+          const collectedProducts: any[] = [];
+
+          devCategories.forEach((cat: any) => {
+            const catProds = safeActiveProducts
+              .filter((p: any) => p.categoryId === cat.id)
+              .slice(0, 6);
+            categoryProducts[cat.id] = catProds;
+            collectedProducts.push(...catProds);
+          });
+
+          const featuredProducts = safeActiveProducts
+            .filter((p: any) => p.featured || p.isFeatured)
+            .slice(0, 8);
+
+          const uniqueProducts = Array.from(new Map(collectedProducts.map((p) => [p.id, p])).values());
+
+          res.setHeader('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=60');
+          res.statusCode = 200;
+          return res.end(
+            JSON.stringify({
+              success: true,
+              settings: safeSettings,
+              categories: devCategories,
+              slides: activeSliders,
+              categoryProducts,
+              featuredProducts,
+              products: uniqueProducts,
+            })
+          );
+        }
+
         // 1. PRODUCTS
         if (url.pathname === '/api/products') {
           if (method === 'GET') {

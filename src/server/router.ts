@@ -1789,6 +1789,61 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
   }
 
   // ==========================================
+  // 0. OPTIMIZED PUBLIC HOMEPAGE CONSOLIDATED ROUTE
+  // ==========================================
+  if (path === '/api/store/homepage' && (method === 'GET' || method === 'HEAD')) {
+    try {
+      const [rawSettings, categories, sliders, allActiveProducts] = await Promise.all([
+        getStoreSettings(env.DB),
+        getAllCategories(env.DB),
+        getAllSliders(env.DB),
+        getAllProducts(env.DB, { includeInactive: false }),
+      ]);
+
+      const safeSettings = maskSettings(rawSettings, false, false);
+      const activeSliders = sliders;
+
+      const safeProducts = allActiveProducts.map((p) =>
+        sanitizeProductForRole(p, { isSuperAdmin: false, canViewBuyingPrice: false, canViewProfit: false })
+      );
+
+      const categoryProducts: Record<string, any[]> = {};
+      const collectedProducts: any[] = [];
+
+      for (const cat of categories) {
+        const catProds = safeProducts.filter((p) => p.categoryId === cat.id).slice(0, 6);
+        categoryProducts[cat.id] = catProds;
+        collectedProducts.push(...catProds);
+      }
+
+      const featuredProducts = safeProducts.filter((p) => p.featured || (p as any).isFeatured).slice(0, 8);
+      const uniqueProducts = Array.from(new Map(collectedProducts.map((p) => [p.id, p])).values());
+
+      return jsonResponse(
+        {
+          success: true,
+          settings: safeSettings,
+          categories,
+          slides: activeSliders,
+          categoryProducts,
+          featuredProducts,
+          products: uniqueProducts,
+        },
+        200,
+        {
+          'Cache-Control': 'public, max-age=60, s-maxage=120, stale-while-revalidate=60',
+          'Vary': 'Origin',
+        }
+      );
+    } catch (err: any) {
+      return jsonResponse(
+        { success: false, error: err?.message || 'Failed to load homepage store data' },
+        500
+      );
+    }
+  }
+
+  // ==========================================
   // 1. PRODUCTS CRUD ROUTES
   // ==========================================
   if (path === '/api/products') {

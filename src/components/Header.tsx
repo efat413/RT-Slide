@@ -233,9 +233,9 @@ export const Header: React.FC = () => {
         </div>
 
         {/* Search Bar - Next to Logo & Brand Name on Mobile, in center on Desktop */}
-        <div className="flex-1 min-w-0 max-w-full md:max-w-md lg:max-w-xl mx-1 sm:mx-3 relative">
+        <div className="flex-1 min-w-0 max-w-full md:max-w-md lg:max-w-xl mx-1.5 sm:mx-3 relative">
           <div className="relative w-full">
-            <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 absolute left-2.5 sm:left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
             <input
               id="header-search-input"
               type="text"
@@ -247,15 +247,15 @@ export const Header: React.FC = () => {
                 }
               }}
               placeholder="Search products..."
-              className="w-full pl-7 sm:pl-9 pr-7 sm:pr-8 py-1.5 sm:py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-slate-200/90 focus:border-rose-500 rounded-xl text-xs font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all"
+              className="w-full pl-9 pr-8 py-2 bg-slate-100/90 hover:bg-slate-100 focus:bg-white border border-slate-200/90 focus:border-rose-500 rounded-xl text-xs sm:text-sm font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-rose-500/20 transition-all shadow-2xs"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
                 title="Clear search"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
@@ -516,11 +516,11 @@ export const Header: React.FC = () => {
             )}
           </div>
 
-          {/* Wishlist Button */}
+          {/* Wishlist Button - Desktop only; on mobile, moved inside the right-side menu bar */}
           <button
             id="header-wishlist-btn"
             onClick={() => setIsWishlistOpen(true)}
-            className="relative p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors shrink-0 flex items-center gap-1.5 border border-slate-200/80"
+            className="hidden md:flex relative p-2 sm:px-3 sm:py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition-colors shrink-0 items-center gap-1.5 border border-slate-200/80"
             aria-label="Wishlist"
             title="Saved Items"
           >
