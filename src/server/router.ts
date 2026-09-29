@@ -1342,6 +1342,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         recordFailedAttempt(comboRateKey, 5, 900, env.DB),
       ]);
 
+      const startTime = Date.now();
+
       // Look up existing user in D1 using parameterized case-insensitive email query
       const user = env.DB ? await getUserByEmail(env.DB, rawEmail) : null;
 
@@ -1352,43 +1354,69 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         message: 'If the account exists, password reset instructions have been sent.',
       };
 
-      // Case 2 — Account does NOT exist
       if (!user || !user.email) {
-        // Perform simulated cryptographic digest to prevent timing analysis
-        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawEmail + ':anti_enum_salt'));
-        return jsonResponse(genericSuccessResponse, 200);
-      }
+        // Case 2 — Account does NOT exist: Perform matched dummy operations to eliminate timing analysis
+        const dummyTokenBytes = new Uint8Array(32);
+        crypto.getRandomValues(dummyTokenBytes);
+        const dummyRawToken = bufferToHex(dummyTokenBytes.buffer);
+        const dummyHashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(dummyRawToken));
+        const dummyTokenHash = bufferToHex(dummyHashBuffer);
+        const dummyAppUrl = resolveAppUrl(env, request.url);
+        const dummyResetUrl = `${dummyAppUrl}/reset-password?token=${encodeURIComponent(dummyRawToken)}`;
+        void dummyResetUrl;
 
-      // Case 1 — Account exists
-      // 1. Generate cryptographically secure random token (32 bytes = 64 hex characters)
-      const tokenBytes = new Uint8Array(32);
-      crypto.getRandomValues(tokenBytes);
-      const rawToken = bufferToHex(tokenBytes.buffer);
-
-      // 2. Store ONLY the SHA-256 hash of the reset token in D1 (never plaintext)
-      const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken));
-      const tokenHash = bufferToHex(hashBuffer);
-
-      // 3. Short expiration time: 60 minutes
-      const expiresAt = Date.now() + 60 * 60 * 1000;
-
-      if (env.DB) {
-        await createPasswordResetToken(env.DB, user.id, tokenHash, expiresAt);
-      }
-
-      // 4. Give raw token ONLY to the email-link generation logic using production APP_URL
-      const appUrl = resolveAppUrl(env, request.url);
-      const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
-
-      // 5. Send password-reset email to the exact registered email address asynchronously
-      const emailPromise = sendPasswordResetEmail(env, user.email, resetUrl).catch((err) => {
-        console.error('[Auth Diagnostics] resend_failure: Failed to dispatch password reset email.', err);
-      });
-
-      if (ctx && typeof ctx.waitUntil === 'function') {
-        ctx.waitUntil(emailPromise);
+        if (env.DB) {
+          try {
+            await env.DB
+              .prepare('UPDATE password_reset_tokens SET used_at = ? WHERE user_id = ? AND used_at IS NULL')
+              .bind(Date.now(), '__dummy_nonexistent_user__')
+              .run();
+            await env.DB
+              .prepare('SELECT id FROM password_reset_tokens WHERE id = ? LIMIT 1')
+              .bind(dummyTokenHash)
+              .first();
+          } catch {}
+        }
       } else {
-        void emailPromise;
+        // Case 1 — Account exists
+        // 1. Generate cryptographically secure random token (32 bytes = 64 hex characters)
+        const tokenBytes = new Uint8Array(32);
+        crypto.getRandomValues(tokenBytes);
+        const rawToken = bufferToHex(tokenBytes.buffer);
+
+        // 2. Store ONLY the SHA-256 hash of the reset token in D1 (never plaintext)
+        const hashBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken));
+        const tokenHash = bufferToHex(hashBuffer);
+
+        // 3. Short expiration time: 60 minutes
+        const expiresAt = Date.now() + 60 * 60 * 1000;
+
+        if (env.DB) {
+          await createPasswordResetToken(env.DB, user.id, tokenHash, expiresAt);
+        }
+
+        // 4. Give raw token ONLY to the email-link generation logic using production APP_URL
+        const appUrl = resolveAppUrl(env, request.url);
+        const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+
+        // 5. Send password-reset email to the exact registered email address in the background
+        const emailPromise = sendPasswordResetEmail(env, user.email, resetUrl).catch((err) => {
+          console.error('[Auth Diagnostics] resend_failure: Failed to dispatch password reset email.', err);
+        });
+
+        if (ctx && typeof ctx.waitUntil === 'function') {
+          ctx.waitUntil(emailPromise);
+        } else {
+          void emailPromise;
+        }
+      }
+
+      // Equalize response timing across existing and non-existing accounts
+      const TARGET_RESET_TIME_MS = 100;
+      const elapsed = Date.now() - startTime;
+      const remainingDelay = TARGET_RESET_TIME_MS - elapsed;
+      if (remainingDelay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, remainingDelay));
       }
 
       return jsonResponse(genericSuccessResponse, 200);

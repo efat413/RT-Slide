@@ -1110,6 +1110,7 @@ function localApiDevPlugin(): Plugin {
             recordDevRateAttempt(emailRateKey, 900);
             recordDevRateAttempt(comboRateKey, 900);
 
+            const startTime = Date.now();
             const found = devUsers.find((u) => String(u.email || '').trim().toLowerCase() === rawEmail);
 
             const genericSuccess = {
@@ -1118,68 +1119,85 @@ function localApiDevPlugin(): Plugin {
               message: 'If the account exists, password reset instructions have been sent.',
             };
 
-            // Case 2 — Account does NOT exist (Generic anti-enumeration response)
             if (!found || !found.email) {
-              await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawEmail + ':anti_enum_salt'));
-              res.statusCode = 200;
-              return res.end(JSON.stringify(genericSuccess));
-            }
-
-            // Case 1 — Account exists
-            // Invalidate any previous unused reset tokens for this user
-            for (const [, existingToken] of devPasswordResetTokens.entries()) {
-              if (existingToken.userId === found.id && existingToken.usedAt == null) {
-                existingToken.usedAt = Date.now();
-              }
-            }
-
-            const rawToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
-            const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken));
-            const tokenHash = bufferToHex(hashBuf);
-            const expiresAt = Date.now() + 60 * 60 * 1000;
-            const id = `prt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
-            devPasswordResetTokens.set(tokenHash, {
-              id,
-              userId: found.id,
-              tokenHash,
-              expiresAt,
-              usedAt: null,
-              createdAt: Date.now(),
-            });
-
-            let rawAppUrl = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
-            if (rawAppUrl && !rawAppUrl.startsWith('http://') && !rawAppUrl.startsWith('https://')) {
-              rawAppUrl = `https://${rawAppUrl}`;
-            }
-            const baseUrl = rawAppUrl || 'https://rongdhonutrade.com';
-            const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
-            const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
-
-            if (resendApiKey) {
-              try {
-                const rawFrom = (process.env.RESEND_FROM_EMAIL || '').trim() || 'support@rongdhonutrade.com';
-                const fromEmail = rawFrom.includes('<') ? rawFrom : `Rongodhonu Trade <${rawFrom}>`;
-                const resendRes = await fetch('https://api.resend.com/emails', {
-                  method: 'POST',
-                  headers: {
-                    Authorization: `Bearer ${resendApiKey}`,
-                    'Content-Type': 'application/json',
-                  },
-                  body: JSON.stringify({
-                    from: fromEmail,
-                    to: [found.email],
-                    subject: 'Reset your Rongodhonu Trade password',
-                    html: `<p>Click here to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`,
-                    text: `Reset your Rongodhonu Trade password:\n${resetUrl}\nExpires in 60 minutes.`,
-                  }),
-                });
-                if (!resendRes.ok) {
-                  console.error('[Auth Diagnostics] resend_failure: Resend API returned non-2xx status');
+              // Case 2 — Account does NOT exist: Perform matched dummy operations to eliminate timing differences
+              for (const [, existingToken] of devPasswordResetTokens.entries()) {
+                if (existingToken.userId === '__dummy__' && existingToken.usedAt == null) {
+                  existingToken.usedAt = Date.now();
                 }
-              } catch {
-                console.error('[Auth Diagnostics] resend_failure: Resend Network Error');
               }
+              const dummyRawToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
+              const dummyHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(dummyRawToken));
+              const dummyTokenHash = bufferToHex(dummyHashBuf);
+              void dummyTokenHash;
+            } else {
+              // Case 1 — Account exists
+              // Invalidate any previous unused reset tokens for this user
+              for (const [, existingToken] of devPasswordResetTokens.entries()) {
+                if (existingToken.userId === found.id && existingToken.usedAt == null) {
+                  existingToken.usedAt = Date.now();
+                }
+              }
+
+              const rawToken = Array.from(crypto.getRandomValues(new Uint8Array(32)), (b) => b.toString(16).padStart(2, '0')).join('');
+              const hashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(rawToken));
+              const tokenHash = bufferToHex(hashBuf);
+              const expiresAt = Date.now() + 60 * 60 * 1000;
+              const id = `prt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+              devPasswordResetTokens.set(tokenHash, {
+                id,
+                userId: found.id,
+                tokenHash,
+                expiresAt,
+                usedAt: null,
+                createdAt: Date.now(),
+              });
+
+              let rawAppUrl = (process.env.APP_URL || '').trim().replace(/\/+$/, '');
+              if (rawAppUrl && !rawAppUrl.startsWith('http://') && !rawAppUrl.startsWith('https://')) {
+                rawAppUrl = `https://${rawAppUrl}`;
+              }
+              const baseUrl = rawAppUrl || 'https://rongdhonutrade.com';
+              const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
+              const resendApiKey = (process.env.RESEND_API_KEY || '').trim();
+
+              if (resendApiKey) {
+                // Send in the background asynchronously without blocking or delaying the HTTP response
+                void (async () => {
+                  try {
+                    const rawFrom = (process.env.RESEND_FROM_EMAIL || '').trim() || 'support@rongdhonutrade.com';
+                    const fromEmail = rawFrom.includes('<') ? rawFrom : `Rongodhonu Trade <${rawFrom}>`;
+                    const resendRes = await fetch('https://api.resend.com/emails', {
+                      method: 'POST',
+                      headers: {
+                        Authorization: `Bearer ${resendApiKey}`,
+                        'Content-Type': 'application/json',
+                      },
+                      body: JSON.stringify({
+                        from: fromEmail,
+                        to: [found.email],
+                        subject: 'Reset your Rongodhonu Trade password',
+                        html: `<p>Click here to reset your password: <a href="${resetUrl}">${resetUrl}</a></p>`,
+                        text: `Reset your Rongodhonu Trade password:\n${resetUrl}\nExpires in 60 minutes.`,
+                      }),
+                    });
+                    if (!resendRes.ok) {
+                      console.error('[Auth Diagnostics] resend_failure: Resend API returned non-2xx status');
+                    }
+                  } catch {
+                    console.error('[Auth Diagnostics] resend_failure: Resend Network Error');
+                  }
+                })();
+              }
+            }
+
+            // Equalize response timing across existing and non-existing accounts
+            const TARGET_RESET_TIME_MS = 100;
+            const elapsed = Date.now() - startTime;
+            const remainingDelay = TARGET_RESET_TIME_MS - elapsed;
+            if (remainingDelay > 0) {
+              await new Promise((resolve) => setTimeout(resolve, remainingDelay));
             }
 
             res.statusCode = 200;
