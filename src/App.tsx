@@ -203,12 +203,18 @@ const StoreContent: React.FC = () => {
               </div>
             </div>
 
-            {/* Category Filter Skeleton */}
-            <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto py-3 sm:py-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <div className="h-9 sm:h-10 w-28 sm:w-32 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
-              <div className="h-9 sm:h-10 w-36 sm:w-44 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
-              <div className="h-9 sm:h-10 w-40 sm:w-48 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
-              <div className="h-9 sm:h-10 w-32 sm:w-36 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
+            {/* Category Dropdown Filter Skeleton */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3 sm:py-4">
+              <div className="flex items-center gap-2.5">
+                <div className="h-5 w-20 rounded-md bg-slate-200 animate-pulse" />
+                <div className="h-9 sm:h-10 w-48 sm:w-56 rounded-xl bg-slate-200 animate-pulse" />
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <div className="h-8 w-14 rounded-xl bg-slate-200 animate-pulse shrink-0" />
+                <div className="h-8 w-28 rounded-xl bg-slate-200 animate-pulse shrink-0" />
+                <div className="h-8 w-32 rounded-xl bg-slate-200 animate-pulse shrink-0" />
+                <div className="h-8 w-28 rounded-xl bg-slate-200 animate-pulse shrink-0" />
+              </div>
             </div>
 
             {/* Product Feed Section Skeleton */}
@@ -330,58 +336,86 @@ const StoreContent: React.FC = () => {
             </div>
           )}
 
-          {/* Restored Category Selector / Filter Bar directly below homepage slider/banner */}
+          {/* Category Dropdown Filter Bar directly below homepage slider/banner */}
           {!searchQuery && !selectedCategory && categories.length > 0 && (
             <div
               id="homepage-category-selector"
               aria-label="Filter products by category"
-              className="mt-4 sm:mt-5 mb-2 sm:mb-3"
+              className="mt-4 sm:mt-5 mb-2 sm:mb-4 bg-white/80 backdrop-blur-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs"
             >
-              <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto pb-1 sm:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap">
-                {/* All Categories Option */}
-                <button
-                  type="button"
-                  onClick={() => setHomeCategoryFilter('all')}
-                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
-                    homeCategoryFilter === 'all'
-                      ? 'bg-slate-900 text-white shadow-xs'
-                      : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200/90'
-                  }`}
-                  aria-pressed={homeCategoryFilter === 'all'}
-                >
-                  <LayoutGrid
-                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
-                      homeCategoryFilter === 'all' ? 'text-rose-400' : 'text-slate-400'
-                    }`}
-                  />
-                  <span>All Categories</span>
-                </button>
-
-                {/* Individual Categories from D1 */}
-                {categories.map((cat) => {
-                  const isSelected = homeCategoryFilter === cat.id;
-                  const IconComp = getCategoryIcon(cat.iconName);
-                  return (
-                    <button
-                      key={cat.id}
-                      type="button"
-                      onClick={() => setHomeCategoryFilter(isSelected ? 'all' : cat.id)}
-                      className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
-                        isSelected
-                          ? 'bg-slate-900 text-white shadow-xs'
-                          : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200/90'
-                      }`}
-                      aria-pressed={isSelected}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                {/* Category Dropdown Filter */}
+                <div className="flex items-center gap-2.5">
+                  <label
+                    htmlFor="homepage-category-dropdown"
+                    className="text-xs sm:text-sm font-extrabold text-slate-800 whitespace-nowrap flex items-center gap-1.5"
+                  >
+                    <Tag className="w-4 h-4 text-rose-500" />
+                    <span>Category:</span>
+                  </label>
+                  <div className="relative min-w-[200px] sm:min-w-[230px]">
+                    <select
+                      id="homepage-category-dropdown"
+                      value={homeCategoryFilter}
+                      onChange={(e) => setHomeCategoryFilter(e.target.value)}
+                      className="w-full appearance-none pl-3.5 pr-9 py-2 sm:py-2.5 bg-white border border-slate-300 hover:border-slate-400 focus:border-rose-500 rounded-xl text-xs sm:text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500/20 shadow-2xs cursor-pointer transition-all"
                     >
-                      <IconComp
-                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
-                          isSelected ? 'text-rose-400' : 'text-slate-400'
+                      <option value="all">All Categories</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <ChevronDown className="w-4 h-4 text-slate-500 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
+                </div>
+
+                {/* Quick-select Category Pills */}
+                <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  <button
+                    type="button"
+                    onClick={() => setHomeCategoryFilter('all')}
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
+                      homeCategoryFilter === 'all'
+                        ? 'bg-slate-900 text-white shadow-xs'
+                        : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                    aria-pressed={homeCategoryFilter === 'all'}
+                  >
+                    <LayoutGrid
+                      className={`w-3.5 h-3.5 ${
+                        homeCategoryFilter === 'all' ? 'text-rose-400' : 'text-slate-400'
+                      }`}
+                    />
+                    <span>All</span>
+                  </button>
+
+                  {categories.map((cat) => {
+                    const isSelected = homeCategoryFilter === cat.id;
+                    const IconComp = getCategoryIcon(cat.iconName);
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setHomeCategoryFilter(isSelected ? 'all' : cat.id)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
+                          isSelected
+                            ? 'bg-slate-900 text-white shadow-xs'
+                            : 'bg-slate-50 text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-slate-200'
                         }`}
-                      />
-                      <span>{cat.name}</span>
-                    </button>
-                  );
-                })}
+                        aria-pressed={isSelected}
+                      >
+                        <IconComp
+                          className={`w-3.5 h-3.5 shrink-0 ${
+                            isSelected ? 'text-rose-400' : 'text-slate-400'
+                          }`}
+                        />
+                        <span>{cat.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
