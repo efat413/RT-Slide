@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 
 interface BrandLogoProps {
   className?: string;
@@ -68,9 +69,14 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
           {LOGO_SRC && !imageError ? (
             <img
               key={LOGO_SRC}
-              src={LOGO_SRC}
+              src={getResponsiveImageUrl(LOGO_SRC, 120)}
               alt={`${displayTitle} Logo`}
+              width={48}
+              height={48}
+              loading="lazy"
+              decoding="async"
               className="w-full h-full object-contain rounded-lg"
+              style={{ aspectRatio: '1 / 1' }}
               referrerPolicy="no-referrer"
               onError={() => setImageError(true)}
             />

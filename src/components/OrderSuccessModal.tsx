@@ -23,6 +23,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { InvoiceModal } from './InvoiceModal';
 import { formatWhatsAppLink } from '../utils/phone';
 import { parseColorOption } from '../utils/productVariants';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 import {
   getProductCode,
   printInvoice,
@@ -234,9 +235,14 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({ order: ini
                 <div key={idx} className="py-2 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <img
-                      src={item.product.imageUrl}
+                      src={getResponsiveImageUrl(item.product.imageUrl, 120)}
                       alt={item.product.title}
+                      width={40}
+                      height={40}
+                      loading="lazy"
+                      decoding="async"
                       className="w-10 h-10 rounded-lg object-cover border border-slate-200"
+                      style={{ aspectRatio: '1 / 1' }}
                     />
                     <div>
                       <p className="font-semibold text-slate-800 line-clamp-1">

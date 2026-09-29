@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Upload, Link as LinkIcon, Image as ImageIcon, CheckCircle2, AlertCircle, AlertTriangle, X, RefreshCw } from 'lucide-react';
 import { processImageFile } from '../utils/imageUpload';
 import { uploadApi } from '../services/storeApi';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 
 interface ImageUploadFieldProps {
   label: string;
@@ -281,8 +282,10 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           >
             {!imageLoadError ? (
               <img
-                src={value}
+                src={getResponsiveImageUrl(value, 360)}
                 alt="Preview"
+                width={144}
+                height={144}
                 className="w-full h-full object-contain"
                 referrerPolicy="no-referrer"
                 onError={() => setImageLoadError(true)}

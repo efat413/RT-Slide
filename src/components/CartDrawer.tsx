@@ -28,6 +28,7 @@ import { DeliveryZone, PaymentMethod, Coupon } from '../types';
 import { SearchableDistrictSelect } from './SearchableDistrictSelect';
 import { BANGLADESH_DISTRICT_UPAZILA_MAP, ALL_BANGLADESH_LOCATIONS } from '../data/bangladeshAreas';
 import { parseColorOption } from '../utils/productVariants';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 
 export const BANGLADESH_DISTRICTS = [
   'Dhaka',
@@ -511,9 +512,14 @@ export const CartDrawer: React.FC = () => {
                         className="flex gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-200 relative group"
                       >
                         <img
-                          src={item.product.imageUrl}
+                          src={getResponsiveImageUrl(item.product.imageUrl, 160)}
                           alt={item.product.title}
+                          width={64}
+                          height={64}
+                          loading="lazy"
+                          decoding="async"
                           className="w-16 h-16 rounded-xl object-cover border border-slate-200 shrink-0"
+                          style={{ aspectRatio: '1 / 1' }}
                         />
                         <div className="flex-1 min-w-0 pr-6">
                           <h4 className="font-bold text-slate-900 text-xs truncate">

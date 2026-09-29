@@ -2369,6 +2369,44 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
     const key = rawKey;
 
     try {
+      const urlObj = new URL(request.url);
+      const widthParam = urlObj.searchParams.get('w') || urlObj.searchParams.get('width');
+      const targetWidth = widthParam ? parseInt(widthParam, 10) : null;
+      const qualityParam = urlObj.searchParams.get('q') || urlObj.searchParams.get('quality');
+      const targetQuality = qualityParam ? parseInt(qualityParam, 10) : 82;
+
+      // In production Cloudflare Workers with Image Resizing enabled:
+      // Check if Cloudflare edge image transformation is available on this request
+      const isCloudflareResizeRequest = request.headers.has('cf-image-resizing');
+      if (
+        !isCloudflareResizeRequest &&
+        targetWidth &&
+        targetWidth > 0 &&
+        targetWidth <= 2400 &&
+        (request as any).cf &&
+        typeof (globalThis as any).fetch === 'function'
+      ) {
+        try {
+          const cfRes = await (globalThis as any).fetch(request.url, {
+            headers: {
+              ...Object.fromEntries(request.headers.entries()),
+              'cf-image-resizing': 'active',
+            },
+            cf: {
+              image: {
+                width: targetWidth,
+                quality: Math.min(Math.max(targetQuality, 50), 95),
+                format: 'auto',
+                fit: 'scale-down',
+              },
+            },
+          });
+          if (cfRes && cfRes.ok) {
+            return cfRes;
+          }
+        } catch {}
+      }
+
       const r2Bucket = env.R2 || env.BUCKET;
       if (r2Bucket) {
         const obj = await r2Bucket.get(key);

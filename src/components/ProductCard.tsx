@@ -3,6 +3,7 @@ import { Star, ShoppingCart, ShoppingBag, Eye, Check, Images, Heart, Share2 } fr
 import { Product } from '../types';
 import { useStore } from '../context/StoreContext';
 import { parseColorOption } from '../utils/productVariants';
+import { getResponsiveImageProps } from '../utils/responsiveImage';
 
 interface ProductCardProps {
   product: Product;
@@ -65,6 +66,9 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
       : 0;
 
+  const primaryImgProps = getResponsiveImageProps(product.imageUrl, 'card');
+  const secondaryImgProps = secondaryImage ? getResponsiveImageProps(secondaryImage, 'card') : null;
+
   return (
     <div
       onClick={() => setQuickViewProduct(product)}
@@ -76,22 +80,18 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       {/* Image Container */}
       <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
         <img
-          src={product.imageUrl}
+          {...primaryImgProps}
           alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'}`}
-          loading="lazy"
-          decoding="async"
           className={`w-full h-full object-cover object-center transition-all duration-500 ease-out ${
             secondaryImage ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
           }`}
         />
 
         {/* Alternate angle reveal on hover if multiple images exist */}
-        {secondaryImage && (
+        {secondaryImage && secondaryImgProps && (
           <img
-            src={secondaryImage}
+            {...secondaryImgProps}
             alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'} view 2`}
-            loading="lazy"
-            decoding="async"
             className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 ease-out"
           />
         )}

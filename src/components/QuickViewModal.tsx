@@ -30,6 +30,7 @@ import { FormattedDescription } from './FormattedDescription';
 import { ConfirmModal } from './ConfirmModal';
 import { parseColorOption } from '../utils/productVariants';
 import { getYouTubeThumbnailUrl } from '../utils/youtube';
+import { getResponsiveImageProps, getResponsiveImageUrl } from '../utils/responsiveImage';
 
 interface QuickViewModalProps {
   product: Product | null;
@@ -273,9 +274,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
         <div className="relative bg-slate-100 flex flex-col justify-between overflow-hidden md:w-1/2 shrink-0">
           <div className="relative aspect-4/3 sm:aspect-square md:aspect-auto md:h-full w-full max-h-56 sm:max-h-72 md:max-h-none overflow-hidden flex items-center justify-center bg-slate-900/5 group/img">
             <img
-              src={activeImage}
+              {...getResponsiveImageProps(activeImage, 'detail', { priority: true })}
               alt={`${product.title} - ${category?.name || 'Rongdhonu Trade'} view ${selectedImageIdx + 1}`}
-              decoding="async"
               onClick={() => setIsFullscreenOpen(true)}
               className="w-full h-full object-cover transition-all duration-300 hover:scale-105 cursor-zoom-in"
               title="Click to view full-screen"
@@ -397,8 +397,12 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                   title={`View photo ${idx + 1}`}
                 >
                   <img
-                    src={img}
+                    src={getResponsiveImageUrl(img, 120)}
+                    width={48}
+                    height={48}
                     alt={`Thumbnail ${idx + 1}`}
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover"
                   />
                 </button>
@@ -423,8 +427,12 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                     />
                   ) : (
                     <img
-                      src={product.imageUrl}
+                      src={getResponsiveImageUrl(product.imageUrl, 120)}
+                      width={48}
+                      height={48}
                       alt={`${product.title} video thumbnail`}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover opacity-60"
                     />
                   )}
@@ -620,9 +628,8 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                         >
                           <div className="aspect-square w-full rounded-lg overflow-hidden bg-slate-100 mb-1">
                             <img
-                              src={rel.imageUrl}
+                              {...getResponsiveImageProps(rel.imageUrl, 'card')}
                               alt={`${rel.title} - ${category?.name || 'Rongdhonu Trade'}`}
-                              decoding="async"
                               className="w-full h-full object-cover group-hover:scale-105 transition-transform"
                             />
                           </div>
@@ -1053,7 +1060,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                 onClick={() => setIsZoomed((prev) => !prev)}
               >
                 <img
-                  src={activeImage}
+                  {...getResponsiveImageProps(activeImage, 'detail', { priority: true, quality: 90 })}
                   alt={`${product.title} - Full screen photo ${selectedImageIdx + 1}`}
                   className={`max-w-full max-h-[75vh] sm:max-h-[82vh] object-contain transition-transform duration-300 ease-out drop-shadow-2xl ${
                     isZoomed ? 'scale-150 sm:scale-175 cursor-zoom-out' : 'scale-100 cursor-zoom-in'
@@ -1117,7 +1124,15 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                       }`}
                       title={`Jump to photo ${idx + 1}`}
                     >
-                      <img src={img} alt={`Thumbnail ${idx + 1}`} className="w-full h-full object-cover" />
+                      <img
+                        src={getResponsiveImageUrl(img, 120)}
+                        width={56}
+                        height={56}
+                        alt={`Thumbnail ${idx + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover"
+                      />
                     </button>
                   ))}
                 </div>

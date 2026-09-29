@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ChevronLeft, ChevronRight, ArrowRight, Sparkles } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { getResponsiveImageProps, getResponsiveImageUrl } from '../utils/responsiveImage';
 
 export const HeroCarousel: React.FC = () => {
   const { setSelectedCategory, slides, settings } = useStore();
@@ -36,6 +37,7 @@ export const HeroCarousel: React.FC = () => {
 
   if (activeSlides.length === 0) {
     if (settings?.bannerUrl) {
+      const singleBannerProps = getResponsiveImageProps(settings.bannerUrl, 'banner', { priority: true });
       return (
         <div
           id="hero-banner-slider"
@@ -43,7 +45,7 @@ export const HeroCarousel: React.FC = () => {
           style={{ aspectRatio: masterRatio }}
         >
           <img
-            src={settings.bannerUrl}
+            {...singleBannerProps}
             alt={settings.siteName || 'Rongdhonu Trade'}
             className={`w-full h-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'}`}
           />
@@ -148,11 +150,13 @@ export const HeroCarousel: React.FC = () => {
         {/* Ambient Blurred Backdrop: Prevents any harsh letterbox while foreground preserves full aspect ratio */}
         <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           <img
-            src={currentBannerUrl}
+            src={getResponsiveImageUrl(currentBannerUrl, 320, 50)}
             alt=""
             aria-hidden="true"
             loading="lazy"
             decoding="async"
+            width={320}
+            height={128}
             className="w-full h-full object-cover blur-xl opacity-35 scale-110"
           />
         </div>
@@ -160,11 +164,8 @@ export const HeroCarousel: React.FC = () => {
         {/* Authoritative Banner Image: Zero stretching, zero distortion, zero forced cropping (LCP prioritized) */}
         <div className="absolute inset-0 z-0 flex items-center justify-center">
           <img
-            src={currentBannerUrl}
+            {...getResponsiveImageProps(currentBannerUrl, 'banner', { priority: true })}
             alt={slide.headline || slide.title || 'Promotional Banner'}
-            loading="eager"
-            fetchPriority="high"
-            decoding="sync"
             className={`w-full h-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'} object-center transition-all duration-700`}
             onError={(e) => {
               (e.target as HTMLImageElement).src = slide.imageUrl || 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=1400&q=80';

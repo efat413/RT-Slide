@@ -8,6 +8,7 @@ import {
   Check,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 
 export const WishlistDrawer: React.FC = () => {
   const {
@@ -104,9 +105,14 @@ export const WishlistDrawer: React.FC = () => {
                         className="w-18 h-18 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200 cursor-pointer"
                       >
                         <img
-                          src={product.imageUrl}
+                          src={getResponsiveImageUrl(product.imageUrl, 160)}
                           alt={product.title}
+                          width={72}
+                          height={72}
+                          loading="lazy"
+                          decoding="async"
                           className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                          style={{ aspectRatio: '1 / 1' }}
                         />
                       </div>
 

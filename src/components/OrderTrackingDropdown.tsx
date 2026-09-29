@@ -23,6 +23,7 @@ import { EditDeliveryInfoModal } from './EditDeliveryInfoModal';
 import { ConfirmModal } from './ConfirmModal';
 import { formatWhatsAppLink } from '../utils/phone';
 import { orderApi } from '../services/orderApi';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 
 interface OrderTrackingDropdownProps {
   onClose: () => void;
@@ -459,9 +460,14 @@ export const OrderTrackingDropdown: React.FC<OrderTrackingDropdownProps> = ({ on
                     <div key={idx} className="p-2 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2 min-w-0 pr-2">
                         <img
-                          src={item.product.imageUrl}
+                          src={getResponsiveImageUrl(item.product.imageUrl, 80)}
                           alt={item.product.title}
+                          width={32}
+                          height={32}
+                          loading="lazy"
+                          decoding="async"
                           className="w-8 h-8 rounded-lg object-cover border border-slate-200 shrink-0"
+                          style={{ aspectRatio: '1 / 1' }}
                         />
                         <div className="min-w-0">
                           <p className="font-semibold text-slate-800 text-[11px] truncate">

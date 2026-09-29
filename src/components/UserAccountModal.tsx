@@ -30,6 +30,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+import { getResponsiveImageUrl } from '../utils/responsiveImage';
 import { Product, Order, DeliveryZone } from '../types';
 import { authApi } from '../services/authApi';
 import { EditDeliveryInfoModal } from './EditDeliveryInfoModal';
@@ -833,9 +834,14 @@ export const UserAccountModal: React.FC<UserAccountModalProps> = ({ isOpen, onCl
                                 <div className="flex items-center gap-2.5 min-w-0 flex-1">
                                   <div className="w-9 h-9 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden shrink-0">
                                     <img
-                                      src={it.product.imageUrl}
+                                      src={getResponsiveImageUrl(it.product.imageUrl, 80)}
                                       alt={it.product.title}
+                                      width={36}
+                                      height={36}
+                                      loading="lazy"
+                                      decoding="async"
                                       className="w-full h-full object-cover"
+                                      style={{ aspectRatio: '1 / 1' }}
                                       onError={(e) => {
                                         (e.currentTarget as HTMLImageElement).src =
                                           'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=150&q=80';

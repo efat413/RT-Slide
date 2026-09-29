@@ -2858,6 +2858,43 @@ function localApiDevPlugin(): Plugin {
           const key = rawKey;
           const item = devMedia.get(key);
           if (item) {
+            const widthParam = url.searchParams.get('w') || url.searchParams.get('width');
+            const targetWidth = widthParam ? parseInt(widthParam, 10) : null;
+
+            if (targetWidth && targetWidth > 0 && targetWidth <= 2400) {
+              try {
+                const sharpModule = await import('sharp');
+                const sharp = (sharpModule as any).default || sharpModule;
+                const accept = (req.headers['accept'] || '') as string;
+                const wantsWebp = accept.includes('image/webp') && item.contentType !== 'image/gif' && item.contentType !== 'image/x-icon';
+
+                let pipeline = sharp(item.buffer).resize(targetWidth, null, {
+                  withoutEnlargement: true,
+                  fit: 'inside',
+                });
+
+                if (wantsWebp) {
+                  const webpBuffer = await pipeline.webp({ quality: 82 }).toBuffer();
+                  const headers = getSafeMediaHeaders('image/webp');
+                  for (const [hName, hVal] of Object.entries(headers)) {
+                    res.setHeader(hName, hVal);
+                  }
+                  res.statusCode = 200;
+                  return res.end(webpBuffer);
+                } else {
+                  const resizedBuffer = await pipeline.toBuffer();
+                  const headers = getSafeMediaHeaders(item.contentType);
+                  for (const [hName, hVal] of Object.entries(headers)) {
+                    res.setHeader(hName, hVal);
+                  }
+                  res.statusCode = 200;
+                  return res.end(resizedBuffer);
+                }
+              } catch (resizeErr) {
+                console.warn('Dev image resizing fallback to original:', resizeErr);
+              }
+            }
+
             const headers = getSafeMediaHeaders(item.contentType);
             for (const [hName, hVal] of Object.entries(headers)) {
               res.setHeader(hName, hVal);
