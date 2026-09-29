@@ -52,7 +52,24 @@ import {
   ShoppingCart,
   Share2,
   RefreshCw,
+  LayoutGrid,
+  Watch,
+  Headphones,
+  Gift,
 } from 'lucide-react';
+
+const getCategoryIcon = (iconName?: string) => {
+  switch (iconName?.toLowerCase()) {
+    case 'watch':
+      return Watch;
+    case 'headphones':
+      return Headphones;
+    case 'gift':
+      return Gift;
+    default:
+      return Tag;
+  }
+};
 
 const StoreContent: React.FC = () => {
   const {
@@ -94,6 +111,7 @@ const StoreContent: React.FC = () => {
   } = useStore();
 
   const [invalidNotice, setInvalidNotice] = useState<string | null>(null);
+  const [homeCategoryFilter, setHomeCategoryFilter] = useState<string>('all');
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -183,6 +201,14 @@ const StoreContent: React.FC = () => {
                 <div className="h-6 sm:h-9 w-48 sm:w-80 rounded-xl bg-slate-300 animate-pulse" />
                 <div className="h-3.5 sm:h-4 w-36 sm:w-60 rounded-md bg-slate-300/70 animate-pulse" />
               </div>
+            </div>
+
+            {/* Category Filter Skeleton */}
+            <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto py-3 sm:py-4 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <div className="h-9 sm:h-10 w-28 sm:w-32 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
+              <div className="h-9 sm:h-10 w-36 sm:w-44 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
+              <div className="h-9 sm:h-10 w-40 sm:w-48 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
+              <div className="h-9 sm:h-10 w-32 sm:w-36 rounded-xl sm:rounded-2xl bg-slate-200 animate-pulse shrink-0" />
             </div>
 
             {/* Product Feed Section Skeleton */}
@@ -304,6 +330,62 @@ const StoreContent: React.FC = () => {
             </div>
           )}
 
+          {/* Restored Category Selector / Filter Bar directly below homepage slider/banner */}
+          {!searchQuery && !selectedCategory && categories.length > 0 && (
+            <div
+              id="homepage-category-selector"
+              aria-label="Filter products by category"
+              className="mt-4 sm:mt-5 mb-2 sm:mb-3"
+            >
+              <div className="flex items-center gap-2 sm:gap-2.5 overflow-x-auto pb-1 sm:pb-0 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:flex-wrap">
+                {/* All Categories Option */}
+                <button
+                  type="button"
+                  onClick={() => setHomeCategoryFilter('all')}
+                  className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
+                    homeCategoryFilter === 'all'
+                      ? 'bg-slate-900 text-white shadow-xs'
+                      : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200/90'
+                  }`}
+                  aria-pressed={homeCategoryFilter === 'all'}
+                >
+                  <LayoutGrid
+                    className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${
+                      homeCategoryFilter === 'all' ? 'text-rose-400' : 'text-slate-400'
+                    }`}
+                  />
+                  <span>All Categories</span>
+                </button>
+
+                {/* Individual Categories from D1 */}
+                {categories.map((cat) => {
+                  const isSelected = homeCategoryFilter === cat.id;
+                  const IconComp = getCategoryIcon(cat.iconName);
+                  return (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setHomeCategoryFilter(isSelected ? 'all' : cat.id)}
+                      className={`inline-flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold transition-all duration-150 active:scale-95 shrink-0 cursor-pointer shadow-2xs ${
+                        isSelected
+                          ? 'bg-slate-900 text-white shadow-xs'
+                          : 'bg-white text-slate-700 hover:text-slate-900 hover:bg-slate-100/80 border border-slate-200/90'
+                      }`}
+                      aria-pressed={isSelected}
+                    >
+                      <IconComp
+                        className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${
+                          isSelected ? 'text-rose-400' : 'text-slate-400'
+                        }`}
+                      />
+                      <span>{cat.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* If viewing a specific category or searching, show separate CategoryListingView with server-side pagination */}
           {selectedCategory || searchQuery.trim() ? (
             <section id="products-feed-section">
@@ -337,7 +419,10 @@ const StoreContent: React.FC = () => {
             /* Homepage: Lightweight category sections with recycling carousels */
             <section id="products-feed-section" className="pt-2 pb-12">
               <div className="space-y-2 sm:space-y-4">
-                {categories.map((cat, idx) => {
+                {(homeCategoryFilter === 'all'
+                  ? categories
+                  : categories.filter((c) => c.id === homeCategoryFilter)
+                ).map((cat, idx) => {
                   const catProducts =
                     homepageCategoryProducts[cat.id] && homepageCategoryProducts[cat.id].length > 0
                       ? homepageCategoryProducts[cat.id]
