@@ -2263,6 +2263,51 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       return jsonResponse({ success: false, error: 'Forbidden: Customers cannot upload media.' }, 403);
     }
 
+    // Server-verified user identity (never trust client-supplied userId)
+    const userId = auth!.dbUser?.id || auth!.tokenUser?.userId || auth!.tokenUser?.email || 'authenticated-user';
+    const burstKey = `upload_burst:user:${userId}`;
+    const hourKey = `upload_hour:user:${userId}`;
+
+    // Distributed Rate Limit Checks via D1 rate_limits table & in-memory cache
+    const [burstCheck, hourCheck] = await Promise.all([
+      checkRateLimit(burstKey, 10, 60, env.DB),
+      checkRateLimit(hourKey, 60, 3600, env.DB),
+    ]);
+
+    if (!burstCheck.allowed) {
+      const retrySecs = burstCheck.remainingSeconds || 60;
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Upload rate limit exceeded. Please wait a moment before uploading more images.',
+          retryAfter: retrySecs,
+        },
+        429,
+        {
+          'Retry-After': String(retrySecs),
+          'X-RateLimit-Limit': '10',
+          'X-RateLimit-Remaining': '0',
+        }
+      );
+    }
+
+    if (!hourCheck.allowed) {
+      const retrySecs = hourCheck.remainingSeconds || 3600;
+      return jsonResponse(
+        {
+          success: false,
+          error: 'Hourly upload limit reached. Please wait before uploading more images.',
+          retryAfter: retrySecs,
+        },
+        429,
+        {
+          'Retry-After': String(retrySecs),
+          'X-RateLimit-Limit': '60',
+          'X-RateLimit-Remaining': '0',
+        }
+      );
+    }
+
     try {
       // 1. Strict pre-upload size check BEFORE processing the entire body
       const contentLengthHeader = request.headers.get('Content-Length');
@@ -2315,6 +2360,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       // 2. Validate authoritative magic bytes and inspect buffer for script/markup injection
       const validation = validateImageBuffer(fileBuffer);
       if (!validation.valid || !validation.mime || !validation.extension) {
+        await recordFailedAttempt(burstKey, 10, 60, env.DB);
         return jsonResponse(
           { success: false, error: validation.error || 'Invalid or unsupported image file.' },
           400
@@ -2342,6 +2388,12 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const base64Data = btoa(binary);
         await saveMediaAssetInD1(env.DB, key, verifiedMime, base64Data, fileBuffer.byteLength);
       }
+
+      // 4. Record successful upload in distributed rate limiters
+      await Promise.all([
+        recordFailedAttempt(burstKey, 10, 60, env.DB),
+        recordFailedAttempt(hourKey, 60, 3600, env.DB),
+      ]);
 
       const mediaUrl = `/api/media/${key}`;
       return jsonResponse({

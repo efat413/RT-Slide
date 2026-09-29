@@ -2766,6 +2766,41 @@ function localApiDevPlugin(): Plugin {
             return res.end(JSON.stringify({ success: false, error: 'Forbidden: Customers cannot upload media.' }));
           }
 
+          // Per-user upload rate limit (server-verified identity)
+          const userId = authResult.auth?.user?.id || authResult.auth?.user?.email || 'dev-user';
+          const burstKey = `upload_burst:user:${userId}`;
+          const hourKey = `upload_hour:user:${userId}`;
+
+          if (!checkDevRateLimit(burstKey, 10, 60)) {
+            const entry = devRateLimits.get(burstKey);
+            const retrySecs = entry ? Math.max(1, Math.ceil((entry.resetAt - Date.now()) / 1000)) : 60;
+            res.statusCode = 429;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Retry-After', String(retrySecs));
+            res.setHeader('X-RateLimit-Limit', '10');
+            res.setHeader('X-RateLimit-Remaining', '0');
+            return res.end(JSON.stringify({
+              success: false,
+              error: 'Upload rate limit exceeded. Please wait a moment before uploading more images.',
+              retryAfter: retrySecs,
+            }));
+          }
+
+          if (!checkDevRateLimit(hourKey, 60, 3600)) {
+            const entry = devRateLimits.get(hourKey);
+            const retrySecs = entry ? Math.max(1, Math.ceil((entry.resetAt - Date.now()) / 1000)) : 3600;
+            res.statusCode = 429;
+            res.setHeader('Content-Type', 'application/json');
+            res.setHeader('Retry-After', String(retrySecs));
+            res.setHeader('X-RateLimit-Limit', '60');
+            res.setHeader('X-RateLimit-Remaining', '0');
+            return res.end(JSON.stringify({
+              success: false,
+              error: 'Hourly upload limit reached. Please wait before uploading more images.',
+              retryAfter: retrySecs,
+            }));
+          }
+
           const contentLength = parseInt((req.headers['content-length'] || '0') as string, 10);
           if (contentLength > MAX_IMAGE_SIZE_BYTES) {
             res.statusCode = 413;
@@ -2820,7 +2855,9 @@ function localApiDevPlugin(): Plugin {
               // Validate authoritative magic bytes and content integrity
               const validation = validateImageBuffer(fileBuffer);
               if (!validation.valid || !validation.mime || !validation.extension) {
+                recordDevRateAttempt(burstKey, 60);
                 res.statusCode = 400;
+                res.setHeader('Content-Type', 'application/json');
                 return res.end(JSON.stringify({
                   success: false,
                   error: validation.error || 'Invalid or unsupported image file.',
@@ -2830,6 +2867,10 @@ function localApiDevPlugin(): Plugin {
               const verifiedMime = validation.mime;
               const key = generateSafeMediaKey(validation.extension);
               devMedia.set(key, { buffer: fileBuffer, contentType: verifiedMime });
+
+              // Record successful upload in per-user rate limiters
+              recordDevRateAttempt(burstKey, 60);
+              recordDevRateAttempt(hourKey, 3600);
 
               const mediaUrl = `/api/media/${key}`;
               res.statusCode = 200;
