@@ -1,17 +1,61 @@
 import { Order } from '../types';
 import { isSessionUnauthorizedError, notifyAuthUnauthorized } from './authApi';
 
+export interface OrderSummaryStats {
+  totalAll: number;
+  pendingCount: number;
+  shippedCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
+  unverifiedDbblCount: number;
+  totalRevenue: number;
+  totalDeliveryValue: number;
+  cancelledOrdersValue: number;
+  cancelledProductsValue: number;
+}
+
+export interface OrderQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  payment?: string;
+  sortBy?: 'newest' | 'oldest' | 'amount-desc' | 'amount-asc' | string;
+}
+
 export interface OrderApiResponse<T = any> {
   success: boolean;
   message?: string;
   error?: string;
   orders?: Order[];
   order?: Order;
+  count?: number;
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+  hasNextPage?: boolean;
+  hasPrevPage?: boolean;
+  summary?: OrderSummaryStats;
   data?: T;
   trackingCode?: string;
   tracking_code?: string;
   consignmentId?: string;
   consignment_id?: string;
+}
+
+export interface PaginatedOrdersResponse {
+  success: boolean;
+  orders: Order[];
+  count: number;
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+  summary?: OrderSummaryStats;
+  error?: string;
 }
 
 const API_BASE = '/api';
@@ -30,15 +74,23 @@ function getHeaders(): Record<string, string> {
  */
 export const orderApi = {
   /**
-   * Fetches all orders from Cloudflare D1 central database
+   * Fetches paginated orders from Cloudflare D1 central database
    */
-  async getOrders(search?: string): Promise<{ success: boolean; orders: Order[]; error?: string }> {
+  async getOrders(params?: string | OrderQueryParams): Promise<PaginatedOrdersResponse> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000);
 
+    const query: OrderQueryParams =
+      typeof params === 'string' ? { search: params } : params || {};
+
     try {
       const url = new URL(`${API_BASE}/orders`, window.location.origin);
-      if (search) url.searchParams.set('search', search);
+      if (query.page && query.page > 0) url.searchParams.set('page', String(query.page));
+      if (query.limit && query.limit > 0) url.searchParams.set('limit', String(query.limit));
+      if (query.search && query.search.trim()) url.searchParams.set('search', query.search.trim());
+      if (query.status && query.status !== 'all') url.searchParams.set('status', query.status);
+      if (query.payment && query.payment !== 'all') url.searchParams.set('payment', query.payment);
+      if (query.sortBy) url.searchParams.set('sortBy', query.sortBy);
 
       const res = await fetch(url.toString(), {
         method: 'GET',
@@ -58,16 +110,65 @@ export const orderApi = {
       }
 
       if (data.success && Array.isArray(data.orders)) {
-        return { success: true, orders: data.orders };
+        const orders = data.orders;
+        const limit = Number(data.limit) || query.limit || 25;
+        const page = Number(data.page) || query.page || 1;
+        const total = data.total !== undefined ? Number(data.total) : orders.length;
+        const totalPages = data.totalPages !== undefined ? Number(data.totalPages) : Math.max(1, Math.ceil(total / limit));
+        return {
+          success: true,
+          orders,
+          count: orders.length,
+          total,
+          page,
+          limit,
+          totalPages,
+          hasNextPage: data.hasNextPage !== undefined ? Boolean(data.hasNextPage) : page < totalPages,
+          hasPrevPage: data.hasPrevPage !== undefined ? Boolean(data.hasPrevPage) : page > 1,
+          summary: data.summary,
+        };
       }
-      return { success: false, orders: [], error: data.error || 'Invalid orders payload returned by server' };
+      return {
+        success: false,
+        orders: [],
+        count: 0,
+        total: 0,
+        page: 1,
+        limit: query.limit || 25,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+        error: data.error || 'Invalid orders payload returned by server',
+      };
     } catch (err: any) {
       clearTimeout(timeoutId);
       console.warn('orderApi.getOrders error:', err?.message || err);
       if (err?.name === 'AbortError' || err?.message?.toLowerCase().includes('abort')) {
-        return { success: false, orders: [], error: 'Request timed out while contacting the server. Please try again.' };
+        return {
+          success: false,
+          orders: [],
+          count: 0,
+          total: 0,
+          page: 1,
+          limit: query.limit || 25,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+          error: 'Request timed out while contacting the server. Please try again.',
+        };
       }
-      return { success: false, orders: [], error: err?.message || 'Network error fetching orders' };
+      return {
+        success: false,
+        orders: [],
+        count: 0,
+        total: 0,
+        page: 1,
+        limit: query.limit || 25,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+        error: err?.message || 'Network error fetching orders',
+      };
     }
   },
 

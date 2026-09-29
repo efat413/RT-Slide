@@ -1537,35 +1537,235 @@ export function rowToOrder(row: OrderRow): Order {
   };
 }
 
-export async function getAllOrders(
-  db: D1Database,
-  options?: { limit?: number; search?: string }
-): Promise<Order[]> {
-  let query = 'SELECT * FROM orders ORDER BY created_at DESC';
+export const DEFAULT_ORDER_PAGE_SIZE = 25;
+export const MAX_ORDER_PAGE_SIZE = 100;
+
+export interface OrderFilter {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  payment?: string;
+  sortBy?: 'newest' | 'oldest' | 'amount-desc' | 'amount-asc' | string;
+}
+
+export interface OrderSummaryStats {
+  totalAll: number;
+  pendingCount: number;
+  shippedCount: number;
+  deliveredCount: number;
+  cancelledCount: number;
+  unverifiedDbblCount: number;
+  totalRevenue: number;
+  totalDeliveryValue: number;
+  cancelledOrdersValue: number;
+  cancelledProductsValue: number;
+}
+
+export interface PaginatedOrdersResult {
+  orders: Order[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  hasPrevPage: boolean;
+  summary: OrderSummaryStats;
+}
+
+export function sanitizeOrderPaginationParams(
+  rawPage?: number | string | null,
+  rawLimit?: number | string | null
+): { page: number; limit: number; offset: number } {
+  const parsedPage = typeof rawPage === 'string' ? parseInt(rawPage, 10) : Number(rawPage);
+  const page = Number.isFinite(parsedPage) && parsedPage >= 1 ? Math.floor(parsedPage) : 1;
+
+  const parsedLimit = typeof rawLimit === 'string' ? parseInt(rawLimit, 10) : Number(rawLimit);
+  const limit =
+    Number.isFinite(parsedLimit) && parsedLimit >= 1
+      ? Math.min(MAX_ORDER_PAGE_SIZE, Math.floor(parsedLimit))
+      : DEFAULT_ORDER_PAGE_SIZE;
+
+  const offset = (page - 1) * limit;
+  return { page, limit, offset };
+}
+
+function buildOrderWhereClause(filter?: OrderFilter): { whereClause: string; bindings: any[] } {
+  let where = ' WHERE 1=1';
   const bindings: any[] = [];
 
-  if (options?.search) {
-    const s = `%${options.search}%`;
-    query = `
-      SELECT * FROM orders 
-      WHERE order_number LIKE ? 
-         OR customer_phone LIKE ? 
-         OR customer_name LIKE ?
-         OR transaction_id LIKE ?
-         OR courier_waybill LIKE ?
-         OR consignment_id LIKE ?
-      ORDER BY created_at DESC
-    `;
-    bindings.push(s, s, s, s, s, s);
+  // 1. Shipping / Courier Status Filter (database-level)
+  const rawStatus = (filter?.status || '').trim();
+  if (rawStatus && rawStatus.toLowerCase() !== 'all') {
+    const statusKey = rawStatus.toLowerCase();
+    if (statusKey === 'pending') {
+      where += ` AND (
+        LOWER(shipping_status) IN ('pending', 'processing')
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%pending%'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%pickup%'
+      )`;
+    } else if (statusKey === 'processing') {
+      where += ` AND LOWER(shipping_status) = 'processing'`;
+    } else if (statusKey === 'shipped') {
+      where += ` AND (
+        LOWER(shipping_status) = 'shipped'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%ship%'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%transit%'
+      )`;
+    } else if (statusKey === 'delivered') {
+      where += ` AND (
+        LOWER(shipping_status) = 'delivered'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%deliver%'
+      )`;
+    } else if (statusKey === 'cancelled') {
+      where += ` AND (
+        LOWER(shipping_status) = 'cancelled'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%cancel%'
+        OR LOWER(COALESCE(courier_status, '')) LIKE '%return%'
+      )`;
+    } else {
+      where += ` AND LOWER(shipping_status) = ?`;
+      bindings.push(statusKey);
+    }
   }
 
-  if (options?.limit && options.limit > 0) {
-    query += ' LIMIT ?';
-    bindings.push(options.limit);
+  // 2. Payment Status / Payment Method Filter (database-level)
+  const rawPayment = (filter?.payment || '').trim();
+  if (rawPayment && rawPayment.toLowerCase() !== 'all') {
+    const paymentKey = rawPayment.toUpperCase();
+    if (paymentKey === 'PAID') {
+      where += ` AND UPPER(payment_status) = 'PAID'`;
+    } else if (paymentKey === 'DUE') {
+      where += ` AND UPPER(payment_status) != 'PAID'`;
+    } else if (rawPayment.toLowerCase() === 'dbbl') {
+      where += ` AND LOWER(payment_method) = 'dbbl'`;
+    } else if (rawPayment.toLowerCase() === 'cod') {
+      where += ` AND LOWER(payment_method) = 'cod'`;
+    }
   }
 
+  // 3. Search Query Filter (database-level)
+  const rawSearch = (filter?.search || '').trim();
+  if (rawSearch) {
+    const s = `%${rawSearch}%`;
+    where += ` AND (
+      order_number LIKE ?
+      OR customer_phone LIKE ?
+      OR customer_name LIKE ?
+      OR customer_address LIKE ?
+      OR COALESCE(customer_district, '') LIKE ?
+      OR COALESCE(transaction_id, '') LIKE ?
+      OR COALESCE(courier_waybill, '') LIKE ?
+      OR COALESCE(consignment_id, '') LIKE ?
+    )`;
+    bindings.push(s, s, s, s, s, s, s, s);
+  }
+
+  return { whereClause: where, bindings };
+}
+
+function resolveOrderSortClause(sortBy?: string): string {
+  switch ((sortBy || '').toLowerCase()) {
+    case 'oldest':
+    case 'date-asc':
+    case 'created_asc':
+      return ' ORDER BY created_at ASC, id ASC';
+    case 'amount-desc':
+    case 'total-desc':
+      return ' ORDER BY total_amount DESC, created_at DESC';
+    case 'amount-asc':
+    case 'total-asc':
+      return ' ORDER BY total_amount ASC, created_at DESC';
+    case 'newest':
+    case 'date-desc':
+    case 'created_desc':
+    default:
+      return ' ORDER BY created_at DESC, id DESC';
+  }
+}
+
+export async function getOrderSummaryStats(db: D1Database): Promise<OrderSummaryStats> {
+  const row = await db
+    .prepare(`
+      SELECT
+        COUNT(*) as total_all,
+        SUM(CASE WHEN LOWER(shipping_status) IN ('pending', 'processing') OR LOWER(COALESCE(courier_status, '')) LIKE '%pending%' OR LOWER(COALESCE(courier_status, '')) LIKE '%pickup%' THEN 1 ELSE 0 END) as pending_count,
+        SUM(CASE WHEN LOWER(shipping_status) = 'shipped' OR LOWER(COALESCE(courier_status, '')) LIKE '%ship%' OR LOWER(COALESCE(courier_status, '')) LIKE '%transit%' THEN 1 ELSE 0 END) as shipped_count,
+        SUM(CASE WHEN LOWER(shipping_status) = 'delivered' OR LOWER(COALESCE(courier_status, '')) LIKE '%deliver%' THEN 1 ELSE 0 END) as delivered_count,
+        SUM(CASE WHEN LOWER(shipping_status) = 'cancelled' OR LOWER(COALESCE(courier_status, '')) LIKE '%cancel%' OR LOWER(COALESCE(courier_status, '')) LIKE '%return%' THEN 1 ELSE 0 END) as cancelled_count,
+        SUM(CASE WHEN LOWER(payment_method) = 'dbbl' AND UPPER(payment_status) != 'PAID' THEN 1 ELSE 0 END) as unverified_dbbl_count,
+        COALESCE(SUM(total_amount), 0) as total_revenue,
+        COALESCE(SUM(delivery_fee), 0) as total_delivery_value,
+        COALESCE(SUM(CASE WHEN LOWER(shipping_status) = 'cancelled' OR LOWER(COALESCE(courier_status, '')) LIKE '%cancel%' OR LOWER(COALESCE(courier_status, '')) LIKE '%return%' THEN total_amount ELSE 0 END), 0) as cancelled_orders_value,
+        COALESCE(SUM(CASE WHEN LOWER(shipping_status) = 'cancelled' OR LOWER(COALESCE(courier_status, '')) LIKE '%cancel%' OR LOWER(COALESCE(courier_status, '')) LIKE '%return%' THEN subtotal ELSE 0 END), 0) as cancelled_products_value
+      FROM orders
+    `)
+    .first<Record<string, any>>();
+
+  return {
+    totalAll: Number(row?.total_all) || 0,
+    pendingCount: Number(row?.pending_count) || 0,
+    shippedCount: Number(row?.shipped_count) || 0,
+    deliveredCount: Number(row?.delivered_count) || 0,
+    cancelledCount: Number(row?.cancelled_count) || 0,
+    unverifiedDbblCount: Number(row?.unverified_dbbl_count) || 0,
+    totalRevenue: Number(row?.total_revenue) || 0,
+    totalDeliveryValue: Number(row?.total_delivery_value) || 0,
+    cancelledOrdersValue: Number(row?.cancelled_orders_value) || 0,
+    cancelledProductsValue: Number(row?.cancelled_products_value) || 0,
+  };
+}
+
+export async function getPaginatedOrders(
+  db: D1Database,
+  filter?: OrderFilter
+): Promise<PaginatedOrdersResult> {
+  const { page, limit, offset } = sanitizeOrderPaginationParams(filter?.page, filter?.limit);
+  const { whereClause, bindings } = buildOrderWhereClause(filter);
+  const orderClause = resolveOrderSortClause(filter?.sortBy);
+
+  // 1. Filtered total count
+  const countQuery = `SELECT COUNT(*) as total FROM orders${whereClause}`;
+  const countStmt = db.prepare(countQuery);
+  const boundCount = bindings.length > 0 ? countStmt.bind(...bindings) : countStmt;
+  const countRow = await boundCount.first<{ total: number }>();
+  const total = Number(countRow?.total) || 0;
+
+  // 2. Paginated rows at database level
+  const dataQuery = `SELECT * FROM orders${whereClause}${orderClause} LIMIT ? OFFSET ?`;
+  const dataStmt = db.prepare(dataQuery);
+  const boundData = dataStmt.bind(...bindings, limit, offset);
+  const result = await boundData.all<OrderRow>();
+  const orders = (result.results || []).map(rowToOrder);
+
+  // 3. Aggregate summary stats across orders table
+  const summary = await getOrderSummaryStats(db);
+
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  return {
+    orders,
+    total,
+    page,
+    limit,
+    totalPages,
+    hasNextPage: page < totalPages,
+    hasPrevPage: page > 1,
+    summary,
+  };
+}
+
+export async function getAllOrders(
+  db: D1Database,
+  options?: OrderFilter
+): Promise<Order[]> {
+  const { limit, offset } = sanitizeOrderPaginationParams(options?.page, options?.limit);
+  const { whereClause, bindings } = buildOrderWhereClause(options);
+  const orderClause = resolveOrderSortClause(options?.sortBy);
+
+  const query = `SELECT * FROM orders${whereClause}${orderClause} LIMIT ? OFFSET ?`;
   const stmt = db.prepare(query);
-  const bound = bindings.length > 0 ? stmt.bind(...bindings) : stmt;
+  const bound = stmt.bind(...bindings, limit, offset);
   const result = await bound.all<OrderRow>();
 
   if (!result.results) return [];

@@ -50,6 +50,8 @@ import {
   markPasswordResetTokenUsed,
   // Orders
   getAllOrders,
+  getPaginatedOrders,
+  sanitizeOrderPaginationParams,
   getOrderById,
   insertOrder,
   updateOrderInD1,
@@ -2996,19 +2998,41 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
     }
 
     try {
-      const search = url.searchParams.get('search') || undefined;
+      const pageParam = url.searchParams.get('page');
       const limitParam = url.searchParams.get('limit');
-      const limit = limitParam ? parseInt(limitParam, 10) : undefined;
+      const search = url.searchParams.get('search') || undefined;
+      const status = url.searchParams.get('status') || undefined;
+      const payment = url.searchParams.get('payment') || undefined;
+      const sortBy = url.searchParams.get('sortBy') || url.searchParams.get('sort') || undefined;
 
-      const orders = await getAllOrders(env.DB, { search, limit });
+      const { page, limit } = sanitizeOrderPaginationParams(pageParam, limitParam);
+
+      const paginated = await getPaginatedOrders(env.DB, {
+        page,
+        limit,
+        search,
+        status,
+        payment,
+        sortBy,
+      });
+
       const isSuperAdmin = auth!.role === 'super_admin';
       const canViewBuyingPrice = hasPermission(auth!, 'product.view_buying_price') || isSuperAdmin;
       const canViewProfit = hasPermission(auth!, 'report.profit') || hasPermission(auth!, 'product.view_profit') || isSuperAdmin;
-      const safeOrders = orders.map((o) => sanitizeOrderForRole(o, { isSuperAdmin, canViewBuyingPrice, canViewProfit }));
+      const safeOrders = paginated.orders.map((o) =>
+        sanitizeOrderForRole(o, { isSuperAdmin, canViewBuyingPrice, canViewProfit })
+      );
 
       return jsonResponse({
         success: true,
         count: safeOrders.length,
+        total: paginated.total,
+        page: paginated.page,
+        limit: paginated.limit,
+        totalPages: paginated.totalPages,
+        hasNextPage: paginated.hasNextPage,
+        hasPrevPage: paginated.hasPrevPage,
+        summary: paginated.summary,
         orders: safeOrders,
       });
     } catch (err: any) {

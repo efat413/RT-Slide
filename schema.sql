@@ -155,6 +155,9 @@ CREATE INDEX IF NOT EXISTS idx_orders_order_number ON orders(order_number);
 CREATE INDEX IF NOT EXISTS idx_orders_phone ON orders(customer_phone);
 CREATE INDEX IF NOT EXISTS idx_orders_shipping_status ON orders(shipping_status);
 CREATE INDEX IF NOT EXISTS idx_orders_created_at ON orders(created_at);
+CREATE INDEX IF NOT EXISTS idx_orders_shipping_status_created_at ON orders(shipping_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_payment_status_created_at ON orders(payment_status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_orders_payment_method_created_at ON orders(payment_method, created_at DESC);
 
 -- 8B. EXPENSES TABLE (Super Admin Profit Analytics & Expense Tracking)
 CREATE TABLE IF NOT EXISTS expenses (

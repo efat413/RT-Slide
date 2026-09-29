@@ -43,7 +43,7 @@ import {
   INITIAL_REVIEWS,
   INITIAL_COUPONS,
 } from '../data/seedData';
-import { orderApi } from '../services/orderApi';
+import { orderApi, OrderQueryParams, OrderSummaryStats } from '../services/orderApi';
 import {
   productsApi,
   categoriesApi,
@@ -260,7 +260,28 @@ interface StoreContextType {
   ) => Promise<{ success: boolean; message?: string; updatedOrder?: Order }>;
   cancelCustomerOrder: (orderId: string) => Promise<{ success: boolean; message?: string }>;
   isOrdersLoading: boolean;
-  refreshOrders: () => Promise<void>;
+  refreshOrders: (overrideParams?: OrderQueryParams) => Promise<void>;
+  orderPage: number;
+  setOrderPage: React.Dispatch<React.SetStateAction<number>>;
+  orderPageSize: number;
+  setOrderPageSize: React.Dispatch<React.SetStateAction<number>>;
+  orderTotalCount: number;
+  orderTotalPages: number;
+  orderSummary: OrderSummaryStats | null;
+  orderQueryFilters: {
+    status: string;
+    payment: string;
+    search: string;
+    sortBy: string;
+  };
+  setOrderQueryFilters: React.Dispatch<
+    React.SetStateAction<{
+      status: string;
+      payment: string;
+      search: string;
+      sortBy: string;
+    }>
+  >;
 
   // Admin Security
   isAdminLoggedIn: boolean;
@@ -512,9 +533,41 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [categoryTotalPages, setCategoryTotalPages] = useState<number>(1);
   const [isCategoryLoading, setIsCategoryLoading] = useState<boolean>(false);
 
-  // 4. Orders State - Cloudflare D1 is the single source of truth
+  // 4. Orders State - Cloudflare D1 is the single source of truth (Server-side paginated: default 25/page, max 100)
   const [orders, setOrders] = useState<Order[]>([]);
   const [isOrdersLoading, setIsOrdersLoading] = useState<boolean>(true);
+  const [orderPage, setOrderPage] = useState<number>(1);
+  const [orderPageSize, setOrderPageSize] = useState<number>(25);
+  const [orderTotalCount, setOrderTotalCount] = useState<number>(0);
+  const [orderTotalPages, setOrderTotalPages] = useState<number>(1);
+  const [orderSummary, setOrderSummary] = useState<OrderSummaryStats | null>(null);
+  const [orderQueryFilters, setOrderQueryFilters] = useState<{
+    status: string;
+    payment: string;
+    search: string;
+    sortBy: string;
+  }>({
+    status: 'all',
+    payment: 'all',
+    search: '',
+    sortBy: 'newest',
+  });
+  const orderQueryParamsRef = useRef<OrderQueryParams>({
+    page: 1,
+    limit: 25,
+    status: 'all',
+    payment: 'all',
+    search: '',
+    sortBy: 'newest',
+  });
+  orderQueryParamsRef.current = {
+    page: orderPage,
+    limit: orderPageSize,
+    status: orderQueryFilters.status,
+    payment: orderQueryFilters.payment,
+    search: orderQueryFilters.search,
+    sortBy: orderQueryFilters.sortBy,
+  };
   const isSyncingRef = useRef<boolean>(false);
   const lastMutationTimestampRef = useRef<number>(0);
 
@@ -1074,7 +1127,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // 3. Protected admin queries: ONLY fetch if admin session is verified and user has required permissions
       let usrsRes: PromiseSettledResult<UserAccount[]> | null = null;
-      let ordsRes: PromiseSettledResult<{ success: boolean; orders: Order[] }> | null = null;
+      let ordsRes: PromiseSettledResult<Awaited<ReturnType<typeof orderApi.getOrders>>> | null = null;
 
       if (isAdminLoggedIn && !isAuthInitializing && currentUser) {
         const isSuper = currentUser.role === 'super_admin';
@@ -1091,7 +1144,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         const [uRes, oRes] = await Promise.allSettled([
           canFetchUsers ? usersApi.getAll() : Promise.resolve(null as any),
-          canFetchOrders ? orderApi.getOrders() : Promise.resolve(null as any),
+          canFetchOrders ? orderApi.getOrders(orderQueryParamsRef.current) : Promise.resolve(null as any),
         ]);
         if (canFetchUsers) usrsRes = uRes;
         if (canFetchOrders) ordsRes = oRes;
@@ -1121,6 +1174,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const canApplyOrders = fetchStart >= lastMutationTimestampRef.current;
       if (canApplyOrders && ordsRes && ordsRes.status === 'fulfilled' && ordsRes.value?.success && Array.isArray(ordsRes.value.orders)) {
         setOrders(ordsRes.value.orders);
+        setOrderTotalCount(ordsRes.value.total);
+        setOrderTotalPages(ordsRes.value.totalPages);
+        if (ordsRes.value.summary) {
+          setOrderSummary(ordsRes.value.summary);
+        }
       }
     } catch (e) {
       console.warn('Central store sync warning:', e);
@@ -1138,7 +1196,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await refreshAllStoreData();
   }, [refreshAllStoreData]);
 
-  const refreshOrders = useCallback(async () => {
+  const refreshOrders = useCallback(async (overrideParams?: OrderQueryParams) => {
     if (!isAdminLoggedIn || isAuthInitializing || !currentUser) return;
     const isSuper = currentUser.role === 'super_admin';
     const canFetchOrders =
@@ -1151,10 +1209,19 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const fetchStart = Date.now();
     try {
       setIsOrdersLoading(true);
-      const res = await orderApi.getOrders();
+      const effectiveParams: OrderQueryParams = {
+        ...orderQueryParamsRef.current,
+        ...(overrideParams || {}),
+      };
+      const res = await orderApi.getOrders(effectiveParams);
       if (res.success && Array.isArray(res.orders)) {
         if (fetchStart >= lastMutationTimestampRef.current) {
           setOrders(res.orders);
+          setOrderTotalCount(res.total);
+          setOrderTotalPages(res.totalPages);
+          if (res.summary) {
+            setOrderSummary(res.summary);
+          }
         }
       } else {
         console.warn('Order sync received non-success response:', res.error);
@@ -1165,6 +1232,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setIsOrdersLoading(false);
     }
   }, [isAdminLoggedIn, isAuthInitializing, currentUser]);
+
+  // Trigger server-side paginated order fetch whenever page, pageSize, or filter/search/sort changes
+  useEffect(() => {
+    if (!isAdminLoggedIn || isAuthInitializing || !currentUser) return;
+    refreshOrders({
+      page: orderPage,
+      limit: orderPageSize,
+      status: orderQueryFilters.status,
+      payment: orderQueryFilters.payment,
+      search: orderQueryFilters.search,
+      sortBy: orderQueryFilters.sortBy,
+    });
+  }, [
+    isAdminLoggedIn,
+    isAuthInitializing,
+    currentUser,
+    orderPage,
+    orderPageSize,
+    orderQueryFilters.status,
+    orderQueryFilters.payment,
+    orderQueryFilters.search,
+    orderQueryFilters.sortBy,
+    refreshOrders,
+  ]);
 
   const loadAdminAllProducts = useCallback(async () => {
     try {
@@ -3869,6 +3960,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         finalizePayment,
         isOrdersLoading,
         refreshOrders,
+        orderPage,
+        setOrderPage,
+        orderPageSize,
+        setOrderPageSize,
+        orderTotalCount,
+        orderTotalPages,
+        orderSummary,
+        orderQueryFilters,
+        setOrderQueryFilters,
         isAdminLoggedIn,
         isAuthInitializing,
         adminLogin,

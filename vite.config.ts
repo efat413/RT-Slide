@@ -2287,11 +2287,151 @@ function localApiDevPlugin(): Plugin {
           const canViewBuyingPrice = isSuper || hasDevPermission(authResult.auth!, 'product.view_buying_price');
           const canViewProfit = isSuper || hasDevPermission(authResult.auth!, 'report.profit') || hasDevPermission(authResult.auth!, 'product.view_profit');
 
+          // Parse and strictly clamp pagination parameters (Default: 25, Max: 100)
+          const rawPage = parseInt(url.searchParams.get('page') || '1', 10);
+          const page = Number.isFinite(rawPage) && rawPage >= 1 ? Math.floor(rawPage) : 1;
+
+          const rawLimit = parseInt(url.searchParams.get('limit') || '25', 10);
+          const limit =
+            Number.isFinite(rawLimit) && rawLimit >= 1
+              ? Math.min(100, Math.floor(rawLimit))
+              : 25;
+
+          const rawStatus = (url.searchParams.get('status') || '').trim();
+          const rawPayment = (url.searchParams.get('payment') || '').trim();
+          const rawSearch = (url.searchParams.get('search') || '').trim().toLowerCase();
+          const rawSort = (url.searchParams.get('sortBy') || url.searchParams.get('sort') || 'newest').trim().toLowerCase();
+
+          const matchStatusType = (o: any) => {
+            const ship = String(o.shippingStatus || (o as any).status || '').toLowerCase();
+            const cour = String(o.courierStatus || '').toLowerCase();
+            return {
+              isPending: ship === 'pending' || ship === 'processing' || cour.includes('pending') || cour.includes('pickup'),
+              isProcessing: ship === 'processing',
+              isShipped: ship === 'shipped' || cour.includes('ship') || cour.includes('transit'),
+              isDelivered: ship === 'delivered' || cour.includes('deliver'),
+              isCancelled: ship === 'cancelled' || cour.includes('cancel') || cour.includes('return'),
+            };
+          };
+
+          // Compute overall summary stats before filtering
+          let pendingCount = 0;
+          let shippedCount = 0;
+          let deliveredCount = 0;
+          let cancelledCount = 0;
+          let unverifiedDbblCount = 0;
+          let totalRevenue = 0;
+          let totalDeliveryValue = 0;
+          let cancelledOrdersValue = 0;
+          let cancelledProductsValue = 0;
+
+          for (const ord of devOrders) {
+            const st = matchStatusType(ord);
+            if (st.isPending) pendingCount++;
+            if (st.isShipped) shippedCount++;
+            if (st.isDelivered) deliveredCount++;
+            if (st.isCancelled) {
+              cancelledCount++;
+              cancelledOrdersValue += Number(ord.totalAmount) || 0;
+              const itemsVal = Array.isArray(ord.items) && ord.items.length > 0
+                ? ord.items.reduce((s: number, it: any) => s + ((Number(it.product?.price) || 0) * (Number(it.quantity) || 1)), 0)
+                : (Number(ord.subtotal) || Math.max(0, (Number(ord.totalAmount) || 0) - (Number(ord.deliveryFee) || 0)));
+              cancelledProductsValue += itemsVal;
+            }
+            if (String(ord.paymentMethod || '').toLowerCase() === 'dbbl' && String(ord.paymentStatus || '').toUpperCase() !== 'PAID') {
+              unverifiedDbblCount++;
+            }
+            totalRevenue += Number(ord.totalAmount) || 0;
+            totalDeliveryValue += Number(ord.deliveryFee) || 0;
+          }
+
+          // Server-side filtering
+          const filtered = devOrders.filter((ord) => {
+            if (rawStatus && rawStatus.toLowerCase() !== 'all') {
+              const sk = rawStatus.toLowerCase();
+              const st = matchStatusType(ord);
+              if (sk === 'pending' && !st.isPending) return false;
+              else if (sk === 'processing' && !st.isProcessing) return false;
+              else if (sk === 'shipped' && !st.isShipped) return false;
+              else if (sk === 'delivered' && !st.isDelivered) return false;
+              else if (sk === 'cancelled' && !st.isCancelled) return false;
+              else if (!['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(sk)) {
+                if (String(ord.shippingStatus || '').toLowerCase() !== sk) return false;
+              }
+            }
+
+            if (rawPayment && rawPayment.toLowerCase() !== 'all') {
+              const isPaid = String(ord.paymentStatus || '').toUpperCase() === 'PAID';
+              const pMethod = String(ord.paymentMethod || '').toLowerCase();
+              if (rawPayment.toUpperCase() === 'PAID' && !isPaid) return false;
+              if (rawPayment.toUpperCase() === 'DUE' && isPaid) return false;
+              if (rawPayment.toLowerCase() === 'dbbl' && pMethod !== 'dbbl') return false;
+              if (rawPayment.toLowerCase() === 'cod' && pMethod !== 'cod') return false;
+            }
+
+            if (rawSearch) {
+              const numMatch = String(ord.orderNumber || '').toLowerCase().includes(rawSearch);
+              const nameMatch = String(ord.customer?.fullName || '').toLowerCase().includes(rawSearch);
+              const phoneMatch = String(ord.customer?.phone || '').toLowerCase().includes(rawSearch);
+              const addrMatch = String(ord.customer?.fullAddress || '').toLowerCase().includes(rawSearch);
+              const distMatch = String(ord.customer?.district || '').toLowerCase().includes(rawSearch);
+              const trxMatch = String(ord.transactionId || ord.dbblDetails?.transactionId || '').toLowerCase().includes(rawSearch);
+              const waybillMatch = String(ord.courierWaybill || ord.courierBooking?.waybillId || '').toLowerCase().includes(rawSearch);
+              const cidMatch = String(ord.consignmentId || ord.courierBooking?.consignmentId || '').toLowerCase().includes(rawSearch);
+              if (!numMatch && !nameMatch && !phoneMatch && !addrMatch && !distMatch && !trxMatch && !waybillMatch && !cidMatch) {
+                return false;
+              }
+            }
+
+            return true;
+          });
+
+          // Server-side sorting
+          filtered.sort((a, b) => {
+            if (rawSort === 'oldest' || rawSort === 'date-asc' || rawSort === 'created_asc') {
+              return new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime();
+            }
+            if (rawSort === 'amount-desc' || rawSort === 'total-desc') {
+              const diff = (Number(b.totalAmount) || 0) - (Number(a.totalAmount) || 0);
+              return diff !== 0 ? diff : new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+            }
+            if (rawSort === 'amount-asc' || rawSort === 'total-asc') {
+              const diff = (Number(a.totalAmount) || 0) - (Number(b.totalAmount) || 0);
+              return diff !== 0 ? diff : new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+            }
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+          });
+
+          const total = filtered.length;
+          const totalPages = Math.max(1, Math.ceil(total / limit));
+          const offset = (page - 1) * limit;
+          const pagedOrders = filtered
+            .slice(offset, offset + limit)
+            .map((o) => sanitizeDevOrder(o, { isSuperAdmin: isSuper, canViewBuyingPrice, canViewProfit }));
+
           res.statusCode = 200;
           return res.end(JSON.stringify({
             success: true,
-            count: devOrders.length,
-            orders: devOrders.map((o) => sanitizeDevOrder(o, { isSuperAdmin: isSuper, canViewBuyingPrice, canViewProfit })),
+            count: pagedOrders.length,
+            total,
+            page,
+            limit,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
+            summary: {
+              totalAll: devOrders.length,
+              pendingCount,
+              shippedCount,
+              deliveredCount,
+              cancelledCount,
+              unverifiedDbblCount,
+              totalRevenue,
+              totalDeliveryValue,
+              cancelledOrdersValue,
+              cancelledProductsValue,
+            },
+            orders: pagedOrders,
           }));
         }
 
