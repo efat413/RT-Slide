@@ -311,7 +311,7 @@ async function runTests() {
   // 3.3 Authenticated Super Admin live API tests
   const adminToken = 'dev-jwt-' + Buffer.from(JSON.stringify({
     userId: 'user-admin-01',
-    email: 'efatadmin',
+    email: 'admin',
     role: 'super_admin',
     exp: Date.now() + 3600000,
   })).toString('base64');

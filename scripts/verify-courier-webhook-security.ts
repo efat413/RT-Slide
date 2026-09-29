@@ -205,7 +205,7 @@ async function runCourierSecurityTests() {
   );
 
   // 4.5 GET /api/courier/webhooks with admin auth -> 200 with masked secrets
-  const adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+  const adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
   const adminGetRes = await fetch(`${baseUrl}/api/courier/webhooks`, {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
@@ -222,7 +222,7 @@ async function runCourierSecurityTests() {
   );
 
   // 4.6 PUT /api/users/:id self-update password requires current password confirmation
-  const userUpdateWithoutCurrentPw = await fetch(`${baseUrl}/api/users/user-admin-efat`, {
+  const userUpdateWithoutCurrentPw = await fetch(`${baseUrl}/api/users/dev-super-admin-1`, {
     method: 'PUT',
     headers: {
       Authorization: `Bearer ${adminToken}`,

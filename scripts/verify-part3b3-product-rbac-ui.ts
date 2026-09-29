@@ -35,9 +35,9 @@ async function runTests() {
 
   // Test Accounts
   const superAdminUser: UserAccount = {
-    id: 'user-admin-efat',
-    name: 'Master Super Admin',
-    email: 'cmt413uec@gmail.com',
+    id: 'dev-super-admin-1',
+    name: 'Dev Super Admin',
+    email: 'dev-superadmin@local.test',
     role: 'super_admin',
     createdAt: new Date().toISOString(),
   };

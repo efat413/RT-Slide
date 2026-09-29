@@ -57,6 +57,23 @@ async function runTests() {
     );
   }
 
+  // 2b. Verify privileged emails and user ID are NOT in vite.config.ts fallback
+  const viteConfigCode = readFileSync(resolve('./vite.config.ts'), 'utf-8');
+  for (const email of forbiddenEmails) {
+    assert(
+      !viteConfigCode.includes(email),
+      `No exposure of ${email} in vite.config.ts fallback`
+    );
+  }
+  assert(
+    !viteConfigCode.includes('user-admin-efat'),
+    `No privileged ID 'user-admin-efat' in vite.config.ts`
+  );
+  assert(
+    !viteConfigCode.includes('efatadmin'),
+    `No privileged username 'efatadmin' in vite.config.ts`
+  );
+
   // 3. Verify isMasterAdminEmail is not used anywhere in components or context
   for (const file of srcFiles) {
     if (file.endsWith('types.ts')) continue; // types.ts only has the deprecated dummy

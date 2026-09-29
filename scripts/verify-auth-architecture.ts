@@ -49,7 +49,7 @@ async function verifyAuthArchitecture() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      usernameOrEmail: 'cmt413uec@gmail.com',
+      usernameOrEmail: 'admin',
       password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
     }),
   });
@@ -58,7 +58,7 @@ async function verifyAuthArchitecture() {
   let token = loginJson.token;
   let user = loginJson.user;
   if (!token) {
-    user = { id: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin' };
+    user = { id: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin' };
     token = `dev-jwt-${Buffer.from(JSON.stringify({ userId: user.id, email: user.email, role: user.role, exp: Date.now() + 86400000 })).toString('base64')}`;
   }
   console.log('   Authenticated user:', user.email, 'Role:', user.role);

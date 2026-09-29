@@ -33,7 +33,7 @@ async function runUploadRateLimitTests() {
 
   // Seeded accounts from seedData.ts
   const adminToken = `dev-jwt-${Buffer.from(
-    JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })
+    JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })
   ).toString('base64')}`;
 
   const staffToken = `dev-jwt-${Buffer.from(

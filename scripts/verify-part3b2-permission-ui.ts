@@ -40,9 +40,9 @@ async function runTests() {
   console.log('================================================================\n');
 
   const superAdminUser: UserAccount = {
-    id: 'user-admin-efat',
-    name: 'Efat Admin',
-    email: 'cmt413uec@gmail.com',
+    id: 'dev-super-admin-1',
+    name: 'Dev Super Admin',
+    email: 'dev-superadmin@local.test',
     role: 'super_admin',
     createdAt: new Date().toISOString(),
   };
@@ -111,7 +111,7 @@ async function runTests() {
   // ----------------------------------------------------------------
   console.log('\n2. Target User Selection Rules:');
   const isSuperAdminTargetProtected = (target: UserAccount) =>
-    target.role === 'super_admin' || target.email.toLowerCase().trim() === 'cmt413uec@gmail.com' || target.id === 'user-admin-efat';
+    target.role === 'super_admin' || target.email.toLowerCase().trim() === 'dev-superadmin@local.test' || target.id === 'dev-super-admin-1';
 
   assert(isSuperAdminTargetProtected(superAdminUser) === true, 'Super Admin CANNOT be selected for ordinary permission editing (Permanently Protected)');
   assert(isSuperAdminTargetProtected(adminUser) === false, 'Admin CAN be selected for permission editing');
@@ -121,7 +121,7 @@ async function runTests() {
   // 3. Live Server API: Loading Permissions via GET /api/users/:id/permissions
   // ----------------------------------------------------------------
   console.log('\n3. Live Server API: Loading Permissions (GET /api/users/:id/permissions):');
-  const superAdminToken = `dev-jwt-${Buffer.from(JSON.stringify({ email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 3600000 })).toString('base64')}`;
+  const superAdminToken = `dev-jwt-${Buffer.from(JSON.stringify({ email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 3600000 })).toString('base64')}`;
   const subAdminToken = `dev-jwt-${Buffer.from(JSON.stringify({ email: 'orders@rongdhonutrade.com', role: 'sub_admin', exp: Date.now() + 3600000 })).toString('base64')}`;
 
   try {

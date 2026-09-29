@@ -263,14 +263,14 @@ async function runTests() {
       const loginRes = await fetch('http://localhost:3000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'cmt413uec@gmail.com', password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '' }),
+        body: JSON.stringify({ email: 'admin', password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '' }),
       });
       if (loginRes.ok) {
         const loginData = await loginRes.json();
         superToken = loginData.token;
       }
       if (!superToken) {
-        superToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+        superToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
       }
       assert(Boolean(superToken), 'Received auth token for Super Admin');
 

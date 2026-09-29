@@ -56,7 +56,7 @@ async function runVerification() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      usernameOrEmail: 'cmt413uec@gmail.com',
+      usernameOrEmail: 'admin',
       password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
     }),
   });
@@ -65,7 +65,7 @@ async function runVerification() {
     adminToken = loginData.token;
   }
   if (!adminToken) {
-    adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+    adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
   }
   assert(Boolean(adminToken), 'Admin login succeeded and received token');
 

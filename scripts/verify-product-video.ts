@@ -69,12 +69,12 @@ async function runTests() {
   const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ usernameOrEmail: 'cmt413uec@gmail.com', password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '' }),
+    body: JSON.stringify({ usernameOrEmail: 'admin', password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '' }),
   });
   const loginData = (await loginRes.json().catch(() => ({}))) as any;
   let token = loginData.token;
   if (!token) {
-    token = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+    token = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
   }
   assert(Boolean(token), 'Super Admin token obtained');
 

@@ -35,7 +35,7 @@ async function runTests() {
   const superAdminUser: UserAccount = {
     id: 'user-super-admin',
     name: 'Master Super Admin',
-    email: 'cmt413uec@gmail.com',
+    email: 'dev-superadmin@local.test',
     role: 'super_admin',
     permissions: {
       canManageOrders: true,

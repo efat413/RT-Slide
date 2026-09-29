@@ -83,16 +83,29 @@ function localApiDevPlugin(): Plugin {
   let devReviews: any[] = [...INITIAL_REVIEWS];
 
   // Resolve Super Admin identities server-side from environment variables
+  // Real production Super Admin identities must NEVER be hardcoded into source code fallbacks
   const configuredSuperAdminEmails: string[] = (
-    process.env.SUPER_ADMIN_EMAILS || 'cmt413uec@gmail.com,efatmkt5@gmail.com,efatmkt7@gmail.com'
+    process.env.SUPER_ADMIN_EMAILS || ''
   )
     .split(',')
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
 
-  const devSuperAdminAccounts: any[] = configuredSuperAdminEmails.map((email, idx) => ({
-    id: idx === 0 ? 'user-admin-efat' : `user-admin-super-${idx}`,
-    name: 'Super Administrator',
+  const configuredSuperAdminUserIds: string[] = (
+    process.env.SUPER_ADMIN_USER_IDS || ''
+  )
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  // Safe local development test admin identity (only used for local development when no server env vars are provided)
+  const devSuperAdminEmails: string[] = configuredSuperAdminEmails.length > 0
+    ? configuredSuperAdminEmails
+    : ['dev-superadmin@local.test'];
+
+  const devSuperAdminAccounts: any[] = devSuperAdminEmails.map((email, idx) => ({
+    id: configuredSuperAdminUserIds[idx] || `dev-super-admin-${idx + 1}`,
+    name: 'Development Super Administrator',
     email: email,
     role: 'super_admin',
     permissions: {
@@ -102,7 +115,7 @@ function localApiDevPlugin(): Plugin {
       canManageAccounts: true,
       canManageSettings: true,
     },
-    phone: '+8801518739561',
+    phone: '01800000000',
     createdAt: '2026-01-01T00:00:00.000Z',
   }));
 
@@ -118,11 +131,12 @@ function localApiDevPlugin(): Plugin {
   const SEED_STAFF_HASH = 'pbkdf2:100000:a9ef994f75098dcf46b34df6dc87de7e:3152dcd6676590554d2fda38a8ed1a65921a7eb9ed787e53c8d1bc52fd4e5b55';
   const SEED_CUST_HASH = 'pbkdf2:100000:070d5b807b9f06dec3d50266509c1c25:240a2c2acd45f238a5d7c8d5c68580ceaa24536c0a94a70eb18b183bae1780d2';
 
-  configuredSuperAdminEmails.forEach((email) => {
+  devSuperAdminEmails.forEach((email) => {
     devUserPasswordHashes.set(email, SEED_ADMIN_HASH);
   });
   devUserPasswordHashes.set('admin', SEED_ADMIN_HASH);
-  devUserPasswordHashes.set('efatadmin', SEED_ADMIN_HASH);
+  devUserPasswordHashes.set('superadmin', SEED_ADMIN_HASH);
+  devUserPasswordHashes.set('dev-admin', SEED_ADMIN_HASH);
   devUserPasswordHashes.set('subadmin@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('staff@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('operations@rongdhonu.com', SEED_STAFF_HASH);
@@ -237,8 +251,8 @@ function localApiDevPlugin(): Plugin {
             u.id === email ||
             (u.name && u.name.toLowerCase().trim() === email)
         );
-        if (!foundUser && (email === 'admin' || email === 'efatadmin' || configuredSuperAdminEmails.includes(email))) {
-          foundUser = devUsers.find((u) => u.email === configuredSuperAdminEmails[0]);
+        if (!foundUser && (email === 'admin' || email === 'superadmin' || devSuperAdminEmails.includes(email))) {
+          foundUser = devUsers.find((u) => u.email === devSuperAdminEmails[0]) || devSuperAdminAccounts[0];
         }
 
         if (!foundUser) {
@@ -865,8 +879,9 @@ function localApiDevPlugin(): Plugin {
 
             const isSuperAdminIdentifier =
               identifier === 'admin' ||
-              identifier === 'efatadmin' ||
-              configuredSuperAdminEmails.includes(identifier);
+              identifier === 'superadmin' ||
+              identifier === 'dev-admin' ||
+              devSuperAdminEmails.includes(identifier);
 
             let foundUser = devUsers.find(
               (u) =>
@@ -875,21 +890,8 @@ function localApiDevPlugin(): Plugin {
                 (u.name && u.name.toLowerCase().trim() === identifier)
             );
             if (!foundUser && isSuperAdminIdentifier) {
-              const targetEmail = identifier.includes('@') ? identifier : configuredSuperAdminEmails[0];
-              foundUser = devUsers.find((u) => u.email?.toLowerCase() === targetEmail.toLowerCase()) || {
-                id: 'user-admin-efat',
-                name: 'Super Administrator',
-                email: targetEmail,
-                role: 'super_admin',
-                permissions: {
-                  canManageOrders: true,
-                  canManageProducts: true,
-                  canManageCategories: true,
-                  canManageAccounts: true,
-                  canManageSettings: true,
-                },
-                createdAt: new Date().toISOString(),
-              };
+              const targetEmail = identifier.includes('@') ? identifier : devSuperAdminEmails[0];
+              foundUser = devUsers.find((u) => u.email?.toLowerCase() === targetEmail.toLowerCase()) || devSuperAdminAccounts[0];
             }
 
             let isPasswordValid = false;
@@ -897,7 +899,7 @@ function localApiDevPlugin(): Plugin {
             const storedHash =
               devUserPasswordHashes.get(identifier.toLowerCase()) ||
               devUserPasswordHashes.get(lookupKey) ||
-              (isSuperAdminIdentifier ? devUserPasswordHashes.get(configuredSuperAdminEmails[0]) : null);
+              (isSuperAdminIdentifier ? devUserPasswordHashes.get(devSuperAdminEmails[0]) : null);
 
             if (storedHash) {
               isPasswordValid = await verifyPassword(password, storedHash);
@@ -1035,10 +1037,10 @@ function localApiDevPlugin(): Plugin {
             }
 
             const targetUser = authResult.auth!.user;
-            const targetEmail = (targetUser?.email || configuredSuperAdminEmails[0]).toLowerCase();
+            const targetEmail = (targetUser?.email || devSuperAdminEmails[0]).toLowerCase();
             const currentExpected =
               devUserPasswordHashes.get(targetEmail) ||
-              (targetUser?.role === 'super_admin' ? devUserPasswordHashes.get(configuredSuperAdminEmails[0]) : undefined);
+              (targetUser?.role === 'super_admin' ? devUserPasswordHashes.get(devSuperAdminEmails[0]) : undefined);
             const isMatch = currentExpected
               ? await verifyPassword(currentPassword, currentExpected)
               : (Boolean(process.env.DEV_ADMIN_PASSWORD) && currentPassword === process.env.DEV_ADMIN_PASSWORD);
@@ -1051,17 +1053,17 @@ function localApiDevPlugin(): Plugin {
             // Invalidate old password and set new PBKDF2 hashed password
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetEmail, newHashed);
-            if (targetUser?.role === 'super_admin' || configuredSuperAdminEmails.includes(targetEmail)) {
-              configuredSuperAdminEmails.forEach((email) => {
+            if (targetUser?.role === 'super_admin' || devSuperAdminEmails.includes(targetEmail)) {
+              devSuperAdminEmails.forEach((email) => {
                 devUserPasswordHashes.set(email, newHashed);
               });
-              devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
+              devUserPasswordHashes.set('superadmin', newHashed);
             }
 
             const freshToken = `dev-jwt-${Buffer.from(
               JSON.stringify({
-                userId: targetUser?.id || 'user-admin-efat',
+                userId: targetUser?.id || devSuperAdminAccounts[0]?.id || 'dev-super-admin-1',
                 email: targetUser?.email || targetEmail,
                 role: targetUser?.role || 'super_admin',
                 pwdSig: computeDevPasswordSig(newHashed),
@@ -1281,12 +1283,12 @@ function localApiDevPlugin(): Plugin {
             }
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetUser.email.toLowerCase(), newHashed);
-            if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
-              configuredSuperAdminEmails.forEach((email) => {
+            if (targetUser.role === 'super_admin' || devSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
+              devSuperAdminEmails.forEach((email) => {
                 devUserPasswordHashes.set(email, newHashed);
               });
-              devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
+              devUserPasswordHashes.set('superadmin', newHashed);
             }
 
             res.statusCode = 200;
@@ -1378,7 +1380,7 @@ function localApiDevPlugin(): Plugin {
           }
 
           const targetUser = devUsers[targetIdx];
-          if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
+          if (targetUser.role === 'super_admin' || devSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
             return sendDevError(res, {
               status: 403,
               body: { success: false, error: 'Forbidden: Super Administrator permissions cannot be modified.' },
@@ -2042,7 +2044,7 @@ function localApiDevPlugin(): Plugin {
             const isSuper = authResult.auth!.role === 'super_admin';
             const usersToReturn = isSuper
               ? devUsers
-              : devUsers.filter((u) => u.role !== 'super_admin' && !configuredSuperAdminEmails.includes(u.email?.toLowerCase()));
+              : devUsers.filter((u) => u.role !== 'super_admin' && !devSuperAdminEmails.includes(u.email?.toLowerCase()));
 
             res.statusCode = 200;
             return res.end(JSON.stringify({ success: true, count: usersToReturn.length, users: usersToReturn.map(formatDevUserResponse) }));
@@ -2090,7 +2092,7 @@ function localApiDevPlugin(): Plugin {
                 return res.end(JSON.stringify({ success: false, error: 'User not found' }));
               }
               const targetUser = devUsers[idx];
-              const isTargetSuper = targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase());
+              const isTargetSuper = targetUser.role === 'super_admin' || devSuperAdminEmails.includes(targetUser.email?.toLowerCase());
               if (isTargetSuper && authResult.auth!.role !== 'super_admin') {
                 return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Super Administrator account cannot be modified by other users.' } });
               }
@@ -2198,7 +2200,7 @@ function localApiDevPlugin(): Plugin {
               res.statusCode = 404;
               return res.end(JSON.stringify({ success: false, error: 'User not found' }));
             }
-            if (targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
+            if (targetUser.role === 'super_admin' || devSuperAdminEmails.includes(targetUser.email?.toLowerCase())) {
               return sendDevError(res, { status: 403, body: { success: false, error: 'Forbidden: Super Administrator account cannot be deleted.' } });
             }
 
@@ -2226,7 +2228,7 @@ function localApiDevPlugin(): Plugin {
             return res.end(JSON.stringify({ success: false, error: 'User not found' }));
           }
 
-          const isTargetSuper = targetUser.role === 'super_admin' || configuredSuperAdminEmails.includes(targetUser.email?.toLowerCase());
+          const isTargetSuper = targetUser.role === 'super_admin' || devSuperAdminEmails.includes(targetUser.email?.toLowerCase());
           if (isTargetSuper) {
             const isSuperAdminRequester = authResult.auth!.role === 'super_admin';
             const isSelf = authResult.auth!.user.id === targetUser.id;
@@ -2260,11 +2262,11 @@ function localApiDevPlugin(): Plugin {
             const newHashed = await hashPassword(newPassword);
             devUserPasswordHashes.set(targetUser.email.toLowerCase(), newHashed);
             if (isTargetSuper) {
-              configuredSuperAdminEmails.forEach((email) => {
+              devSuperAdminEmails.forEach((email) => {
                 devUserPasswordHashes.set(email, newHashed);
               });
-              devUserPasswordHashes.set('efatadmin', newHashed);
               devUserPasswordHashes.set('admin', newHashed);
+              devUserPasswordHashes.set('superadmin', newHashed);
             }
 
             res.statusCode = 200;
@@ -4153,7 +4155,7 @@ export default defineConfig(() => {
       },
     },
     server: {
-      host: process.env.VITE_HOST || (process.env.K_SERVICE || process.env.CONTAINER ? '0.0.0.0' : 'localhost'),
+      host: '0.0.0.0',
       port: 3000,
       allowedHosts: true as const,
       hmr: process.env.DISABLE_HMR !== 'true',

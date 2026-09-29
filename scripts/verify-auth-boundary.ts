@@ -104,8 +104,8 @@ async function runAuthBoundaryTests() {
   // =========================================================================
   console.log('\n[TEST 4] Production Cryptographic Authentication (HMAC-SHA256)...');
   const validPayload = {
-    userId: 'user-admin-efat',
-    email: 'cmt413uec@gmail.com',
+    userId: 'dev-super-admin-1',
+    email: 'dev-superadmin@local.test',
     role: 'super_admin',
   };
 
@@ -114,8 +114,8 @@ async function runAuthBoundaryTests() {
 
   const verified = await verifyAuthToken(signedProdToken, prodSecret);
   console.assert(verified !== null, 'Cryptographic verification must succeed with correct secret');
-  console.assert(verified?.userId === 'user-admin-efat', 'Verified payload userId must match');
-  console.assert(verified?.email === 'cmt413uec@gmail.com', 'Verified payload email must match');
+  console.assert(verified?.userId === 'dev-super-admin-1', 'Verified payload userId must match');
+  console.assert(verified?.email === 'dev-superadmin@local.test', 'Verified payload email must match');
   console.log('✓ Production cryptographic token created and verified successfully');
 
   // =========================================================================
@@ -159,8 +159,8 @@ async function runAuthBoundaryTests() {
     prepare: (query: string) => ({
       bind: (...args: any[]) => ({
         first: async () => ({
-          id: 'user-admin-efat',
-          email: 'cmt413uec@gmail.com',
+          id: 'dev-super-admin-1',
+          email: 'dev-superadmin@local.test',
           role: 'super_admin',
           name: 'Store Admin',
         }),
@@ -196,7 +196,7 @@ async function runAuthBoundaryTests() {
 
   // 7c: Attempt to call protected /api/upload in production using dev-jwt token
   const devAdminToken = `dev-jwt-${Buffer.from(
-    JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })
+    JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })
   ).toString('base64')}`;
 
   const prodUploadRequest = new Request('https://rongdhonutrade.com/api/upload', {

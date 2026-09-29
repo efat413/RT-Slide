@@ -574,7 +574,7 @@ async function requireAuth(
   if (!dbUser && tokenUser.userId) {
     dbUser = await getUserByEmailOrUsername(env.DB, tokenUser.userId);
   }
-  if (!dbUser && (tokenUser.email === 'admin' || tokenUser.email === 'efatadmin')) {
+  if (!dbUser && tokenUser.email === 'admin') {
     const defaultSuper = getSuperAdminEmails(env)[0];
     if (defaultSuper) {
       dbUser = await getUserByEmailOrUsername(env.DB, defaultSuper);
@@ -1138,8 +1138,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       // Check D1 for matching user
       let userRow = await getUserByEmailOrUsername(env.DB, identifier);
 
-      // Deterministic master admin resolution for usernames "efatadmin" or "admin"
-      if (!userRow && (identifier.toLowerCase() === 'efatadmin' || identifier.toLowerCase() === 'admin')) {
+      // Deterministic master admin resolution for username "admin"
+      if (!userRow && identifier.toLowerCase() === 'admin') {
         const defaultSuper = getSuperAdminEmails(env)[0];
         if (defaultSuper) {
           userRow = await getUserByEmailOrUsername(env.DB, defaultSuper);

@@ -10,14 +10,14 @@ async function runPart2Tests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      usernameOrEmail: 'cmt413uec@gmail.com',
+      usernameOrEmail: 'admin',
       password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
     }),
   });
   const loginData = await loginRes.json().catch(() => ({}));
   let adminToken = loginData.token;
   if (!adminToken) {
-    adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+    adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
   }
   console.log('✓ Super Admin logged in successfully with token:', adminToken.slice(0, 25) + '...\n');
 
@@ -202,14 +202,14 @@ async function runPart2Tests() {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      usernameOrEmail: 'cmt413uec@gmail.com',
+      usernameOrEmail: 'admin',
       password: process.env.DEV_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || '',
     }),
   });
   const reloginData = await reloginRes.json().catch(() => ({}));
   let freshAdminToken = reloginData.token;
   if (!freshAdminToken) {
-    freshAdminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+    freshAdminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
   }
   console.log('Re-login successful. New token received.');
 

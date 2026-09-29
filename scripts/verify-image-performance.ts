@@ -91,7 +91,7 @@ async function runImagePerformanceTests() {
   // 6. TEST LIVE SERVER MEDIA ENDPOINT WITH AND WITHOUT RESPONSIVE QUERY
   console.log('\n[TEST 6] Live Dev Server /api/media Endpoint Testing...');
   // Upload a valid image first to test live retrieval
-  let adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'user-admin-efat', email: 'cmt413uec@gmail.com', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
+  let adminToken = `dev-jwt-${Buffer.from(JSON.stringify({ userId: 'dev-super-admin-1', email: 'dev-superadmin@local.test', role: 'super_admin', exp: Date.now() + 86400000 })).toString('base64')}`;
 
   const samplePngBytes = new Uint8Array([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG Signature
