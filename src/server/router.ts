@@ -70,6 +70,7 @@ import {
   insertAuditLogInD1,
   getAuditLogsFromD1,
   findOrderByCourierIdentifier,
+  checkAndRecordWebhookFingerprint,
 } from './db';
 import {
   Order,
@@ -103,6 +104,7 @@ import {
 import {
   verifyCourierWebhookAuth,
   computeHmacSha256Hex,
+  computeWebhookFingerprint,
 } from './webhookAuth';
 import {
   validateWebhookDestination,
@@ -1964,9 +1966,10 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const body = (await request.json()) as any;
         const productData = body.product || body;
 
-        // Security: Non-super admin cannot set buyingPrice
-        const canSetBuyingPrice = hasPermission(auth!, 'product.view_buying_price');
-        if (!canSetBuyingPrice) {
+        // Security: Non-super admin cannot set buyingPrice without dedicated product.manage_buying_price permission
+        // Viewing buying price NEVER grants permission to modify buying price
+        const canManageBuyingPrice = auth!.role === 'super_admin' || hasPermission(auth!, 'product.manage_buying_price');
+        if (!canManageBuyingPrice) {
           delete productData.buyingPrice;
           delete productData.buying_price;
         }
@@ -2036,9 +2039,10 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const body = (await request.json()) as any;
         const updates = body.updates || body.product || body;
 
-        // Security: Non-super admin cannot modify buyingPrice
-        const canSetBuyingPrice = hasPermission(auth!, 'product.view_buying_price');
-        if (!canSetBuyingPrice) {
+        // Security: Non-super admin cannot modify buyingPrice without dedicated product.manage_buying_price permission
+        // Viewing buying price NEVER grants permission to modify buying price
+        const canManageBuyingPrice = auth!.role === 'super_admin' || hasPermission(auth!, 'product.manage_buying_price');
+        if (!canManageBuyingPrice) {
           delete updates.buyingPrice;
           delete updates.buying_price;
         }
@@ -4307,6 +4311,38 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
             },
             authResult.status || 401
           );
+        }
+
+        // REPLAY PROTECTION: Fingerprint deduplication against recent replayed requests
+        const timestampHeader =
+          request.headers.get('x-webhook-timestamp') ||
+          request.headers.get('x-timestamp') ||
+          request.headers.get('x-signature-timestamp') ||
+          request.headers.get('x-req-timestamp') ||
+          '';
+
+        const sigOrSecret =
+          request.headers.get('x-steadfast-signature') ||
+          request.headers.get('x-webhook-signature') ||
+          request.headers.get('x-signature') ||
+          request.headers.get('x-hub-signature-256') ||
+          request.headers.get('x-signature-sha256') ||
+          request.headers.get('x-webhook-secret') ||
+          request.headers.get('secret-key') ||
+          '';
+
+        const fingerprint = await computeWebhookFingerprint(rawBody, timestampHeader, sigOrSecret);
+        if (env.DB) {
+          const { isReplay } = await checkAndRecordWebhookFingerprint(env.DB, fingerprint, 600);
+          if (isReplay) {
+            return jsonResponse(
+              {
+                success: false,
+                error: 'Webhook replay rejected: This webhook request has already been processed.',
+              },
+              409
+            );
+          }
         }
 
         let body: any = {};

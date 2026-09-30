@@ -67,6 +67,7 @@ const PERMISSION_GROUPS: PermissionGroupDefinition[] = [
       'product.update',
       'product.delete',
       'product.view_buying_price',
+      'product.manage_buying_price',
       'product.view_profit',
     ],
   },

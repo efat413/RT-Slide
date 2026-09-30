@@ -10,6 +10,7 @@ export const PERMISSION_KEYS = [
   'product.update',
   'product.delete',
   'product.view_buying_price',
+  'product.manage_buying_price',
   'product.buying_price',
   'product.view_profit',
 
@@ -145,6 +146,15 @@ export const PERMISSIONS_METADATA: Record<PermissionKey, PermissionMetadata> = {
     group: 'Financial / Sensitive Data',
     displayName: 'View Buying Price',
     description: 'Access supplier wholesale buying price on products and orders.',
+    superAdminOnly: false,
+    sensitive: true,
+    dangerous: false,
+  },
+  'product.manage_buying_price': {
+    key: 'product.manage_buying_price',
+    group: 'Financial / Sensitive Data',
+    displayName: 'Manage Buying Price',
+    description: 'Create and update supplier wholesale buying cost on products.',
     superAdminOnly: false,
     sensitive: true,
     dangerous: false,
@@ -450,6 +460,7 @@ export const DEFAULT_ADMIN_1_PERMISSIONS: Readonly<Record<PermissionKey, boolean
   'product.update': true,
   'product.delete': false,
   'product.view_buying_price': false,
+  'product.manage_buying_price': false,
   'product.buying_price': false,
   'product.view_profit': false,
 
@@ -502,6 +513,7 @@ export const DEFAULT_ADMIN_2_PERMISSIONS: Readonly<Record<PermissionKey, boolean
   'product.update': false,
   'product.delete': false,
   'product.view_buying_price': false,
+  'product.manage_buying_price': false,
   'product.buying_price': false,
   'product.view_profit': false,
 
@@ -552,6 +564,7 @@ export const DEFAULT_SUB_ADMIN_PERMISSIONS: Readonly<Record<PermissionKey, boole
   'product.update': false,
   'product.delete': false,
   'product.view_buying_price': false,
+  'product.manage_buying_price': false,
   'product.buying_price': false,
   'product.view_profit': false,
 

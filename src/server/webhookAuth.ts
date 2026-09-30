@@ -37,11 +37,27 @@ export async function computeHmacSha256Hex(secret: string, data: string): Promis
   return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
+/**
+ * Computes a deterministic cryptographic fingerprint (SHA-256) of the authenticated webhook request.
+ */
+export async function computeWebhookFingerprint(
+  rawBody: string,
+  timestamp?: string,
+  authHeader?: string
+): Promise<string> {
+  const enc = new TextEncoder();
+  const data = `${authHeader || ''}:${timestamp || ''}:${rawBody}`;
+  const hashBuffer = await crypto.subtle.digest('SHA-256', enc.encode(data));
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export interface WebhookAuthResult {
   authenticated: boolean;
   status: number;
   error?: string;
   matchedSecretSource?: string;
+  timestampMs?: number;
 }
 
 export interface WebhookRequestInput {
@@ -87,6 +103,9 @@ export async function verifyCourierWebhookAuth(
 
   const envWebhookSecret = (env?.COURIER_WEBHOOK_SECRET || process.env.COURIER_WEBHOOK_SECRET || '').trim();
   if (envWebhookSecret) candidateSecrets.add(envWebhookSecret);
+
+  const envAdminSecret = (env?.ADMIN_SECRET || process.env.ADMIN_SECRET || '').trim();
+  if (envAdminSecret) candidateSecrets.add(envAdminSecret);
 
   const envSteadfastSecret = (env?.STEADFAST_SECRET_KEY || process.env.STEADFAST_SECRET_KEY || '').trim();
   if (envSteadfastSecret) candidateSecrets.add(envSteadfastSecret);
@@ -137,26 +156,26 @@ export async function verifyCourierWebhookAuth(
 
   const apiKeyHeader = getHeaderValue(headers, 'api-key') || getHeaderValue(headers, 'x-api-key');
 
-  // 3. Replay Protection: Validate timestamp if provided
+  // 3. Replay Protection: Extract and Validate Timestamp
   const timestampHeader =
     getHeaderValue(headers, 'x-webhook-timestamp') ||
     getHeaderValue(headers, 'x-timestamp') ||
     getHeaderValue(headers, 'x-signature-timestamp') ||
     getHeaderValue(headers, 'x-req-timestamp');
 
+  let validatedTimestampMs: number | null = null;
   if (timestampHeader) {
-    let timestampMs: number | null = null;
     if (/^\d+$/.test(timestampHeader)) {
       const num = parseInt(timestampHeader, 10);
-      timestampMs = num > 10000000000 ? num : num * 1000;
+      validatedTimestampMs = num > 10000000000 ? num : num * 1000;
     } else {
       const parsed = Date.parse(timestampHeader);
       if (!isNaN(parsed)) {
-        timestampMs = parsed;
+        validatedTimestampMs = parsed;
       }
     }
 
-    if (timestampMs === null) {
+    if (validatedTimestampMs === null) {
       return {
         authenticated: false,
         status: 400,
@@ -166,7 +185,7 @@ export async function verifyCourierWebhookAuth(
 
     const now = Date.now();
     const TOLERANCE_MS = 5 * 60 * 1000; // 5-minute tolerance
-    if (Math.abs(now - timestampMs) > TOLERANCE_MS) {
+    if (Math.abs(now - validatedTimestampMs) > TOLERANCE_MS) {
       return {
         authenticated: false,
         status: 401,
@@ -177,6 +196,15 @@ export async function verifyCourierWebhookAuth(
 
   // 4. Verify HMAC-SHA256 Signature if signature header is provided
   if (sigHeader) {
+    // For HMAC-signed webhooks, require a valid timestamp header
+    if (!timestampHeader) {
+      return {
+        authenticated: false,
+        status: 400,
+        error: 'Missing required courier webhook timestamp header.',
+      };
+    }
+
     let cleanSig = sigHeader.trim();
     if (cleanSig.toLowerCase().startsWith('sha256=')) {
       cleanSig = cleanSig.substring(7).trim();
@@ -193,22 +221,22 @@ export async function verifyCourierWebhookAuth(
     }
 
     for (const secret of candidateSecrets) {
-      // Test payload signature with raw body
-      const expectedSig = await computeHmacSha256Hex(secret, rawBody);
-      if (timingSafeEqualString(cleanSig.toLowerCase(), expectedSig.toLowerCase())) {
-        return { authenticated: true, status: 200, matchedSecretSource: 'signature' };
+      // Prefer signing/verifying HMAC(secret, timestamp + "." + rawBody) consistently
+      const expectedWithDot = await computeHmacSha256Hex(secret, `${timestampHeader}.${rawBody}`);
+      if (timingSafeEqualString(cleanSig.toLowerCase(), expectedWithDot.toLowerCase())) {
+        return { authenticated: true, status: 200, matchedSecretSource: 'timestamped_signature', timestampMs: validatedTimestampMs || undefined };
       }
 
-      // Test payload signature with timestamp prefix if timestamp header exists
-      if (timestampHeader) {
-        const expectedWithDot = await computeHmacSha256Hex(secret, `${timestampHeader}.${rawBody}`);
-        if (timingSafeEqualString(cleanSig.toLowerCase(), expectedWithDot.toLowerCase())) {
-          return { authenticated: true, status: 200, matchedSecretSource: 'timestamped_signature' };
-        }
-        const expectedConcat = await computeHmacSha256Hex(secret, `${timestampHeader}${rawBody}`);
-        if (timingSafeEqualString(cleanSig.toLowerCase(), expectedConcat.toLowerCase())) {
-          return { authenticated: true, status: 200, matchedSecretSource: 'timestamped_signature' };
-        }
+      // Fallback 1: timestamp concatenated without dot
+      const expectedConcat = await computeHmacSha256Hex(secret, `${timestampHeader}${rawBody}`);
+      if (timingSafeEqualString(cleanSig.toLowerCase(), expectedConcat.toLowerCase())) {
+        return { authenticated: true, status: 200, matchedSecretSource: 'timestamped_signature', timestampMs: validatedTimestampMs || undefined };
+      }
+
+      // Fallback 2: raw body only (if timestamp was verified within tolerance)
+      const expectedSig = await computeHmacSha256Hex(secret, rawBody);
+      if (timingSafeEqualString(cleanSig.toLowerCase(), expectedSig.toLowerCase())) {
+        return { authenticated: true, status: 200, matchedSecretSource: 'signature', timestampMs: validatedTimestampMs || undefined };
       }
     }
 
@@ -236,7 +264,7 @@ export async function verifyCourierWebhookAuth(
 
     for (const secret of candidateSecrets) {
       if (timingSafeEqualString(incomingSecret, secret)) {
-        return { authenticated: true, status: 200, matchedSecretSource: 'secret_header' };
+        return { authenticated: true, status: 200, matchedSecretSource: 'secret_header', timestampMs: validatedTimestampMs || undefined };
       }
     }
 

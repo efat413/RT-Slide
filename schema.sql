@@ -268,4 +268,15 @@ CREATE TABLE IF NOT EXISTS media_assets (
 
 CREATE INDEX IF NOT EXISTS idx_media_assets_created ON media_assets(created_at);
 
+-- ==============================================================
+-- 15. WEBHOOK REPLAYS TABLE (Webhook replay protection & deduplication)
+-- ==============================================================
+CREATE TABLE IF NOT EXISTS webhook_replays (
+  fingerprint TEXT PRIMARY KEY,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_webhook_replays_expires ON webhook_replays(expires_at);
+
 

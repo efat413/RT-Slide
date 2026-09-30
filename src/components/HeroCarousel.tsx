@@ -148,11 +148,13 @@ export const HeroCarousel: React.FC = () => {
     >
       {/* Slide Container (Guaranteed 100% width and 100% height from parent fixed aspect ratio) */}
       <div className="relative w-full h-full overflow-hidden">
-        {/* Ambient Blurred Backdrop: Reuses main banner image to eliminate duplicate network request when contain mode is active */}
+        {/* Ambient Blurred Backdrop: Reuses main banner image with identical srcSet to eliminate duplicate network requests */}
         {fitMode !== 'cover' && (
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
             <img
               src={bannerImageProps.src}
+              srcSet={bannerImageProps.srcSet}
+              sizes={bannerImageProps.sizes}
               alt=""
               aria-hidden="true"
               loading="lazy"

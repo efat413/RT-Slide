@@ -124,24 +124,20 @@ export function getResponsiveImageUrl(url: string, width: number, quality: numbe
   }
 
   // 2. Internal Cloudflare / D1 / R2 media endpoints (/api/media/:key)
+  // Preserves clean media URL unless a dedicated edge transformation service is configured
   if (isInternalMediaUrl(cleanUrl)) {
     try {
       const isAbsolute = cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://');
       const dummyBase = 'https://rongdhonutrade.com';
       const parsed = new URL(cleanUrl, dummyBase);
 
-      parsed.searchParams.set('w', width.toString());
-      if (quality && quality !== 82) {
-        parsed.searchParams.set('q', quality.toString());
-      }
-
+      // Return clean pathname to avoid generating fragmented cache keys for identical media assets
       if (isAbsolute) {
-        return parsed.toString();
+        return `${parsed.origin}${parsed.pathname}`;
       }
-      return `${parsed.pathname}${parsed.search}`;
+      return parsed.pathname;
     } catch {
-      const sep = cleanUrl.includes('?') ? '&' : '?';
-      return `${cleanUrl}${sep}w=${width}`;
+      return cleanUrl.split('?')[0];
     }
   }
 
@@ -193,6 +189,15 @@ export function getResponsiveSrcSet(
 ): string | undefined {
   if (!url || typeof url !== 'string') return undefined;
   if (isFixedFormatUrl(url)) return undefined;
+
+  // Real Image Transformation Check:
+  // Only generate srcset if the URL is hosted on a CDN that genuinely provides real dynamic resizing (Unsplash, Cloudinary).
+  // Internal media endpoints (/api/media/:key) and unknown external domains return the original uncompressed image,
+  // so generating multiple query param URLs causes browsers to fetch redundant identical assets and pollutes CDN cache keys.
+  const hasGenuineResizing = isUnsplashUrl(url) || isCloudinaryUrl(url);
+  if (!hasGenuineResizing) {
+    return undefined;
+  }
 
   // Filter out duplicates and sort ascending
   const uniqueWidths = Array.from(new Set(widths)).sort((a, b) => a - b);

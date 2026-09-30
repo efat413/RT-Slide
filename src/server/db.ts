@@ -2778,3 +2778,44 @@ export async function getAuditLogsFromD1(
     return [];
   }
 }
+
+/**
+ * Checks if a courier webhook request fingerprint has already been processed within the TTL window.
+ * If not already present, records the fingerprint in D1 to prevent replay attacks.
+ * Includes opportunistic pruning to prevent unbounded table growth.
+ */
+export async function checkAndRecordWebhookFingerprint(
+  db: D1Database,
+  fingerprint: string,
+  ttlSeconds: number = 600
+): Promise<{ isReplay: boolean }> {
+  if (!db || !fingerprint) return { isReplay: false };
+  const now = Date.now();
+  const expiresAt = now + ttlSeconds * 1000;
+
+  try {
+    // 1. Opportunistic lazy cleanup of expired entries (keeps table compact without unbounded growth)
+    await db.prepare('DELETE FROM webhook_replays WHERE expires_at < ?').bind(now).run().catch(() => {});
+
+    // 2. Check if fingerprint exists and has not expired
+    const existing = await db
+      .prepare('SELECT fingerprint FROM webhook_replays WHERE fingerprint = ? AND expires_at > ?')
+      .bind(fingerprint, now)
+      .first();
+
+    if (existing) {
+      return { isReplay: true };
+    }
+
+    // 3. Insert new fingerprint record
+    await db
+      .prepare('INSERT OR REPLACE INTO webhook_replays (fingerprint, created_at, expires_at) VALUES (?, ?, ?)')
+      .bind(fingerprint, now, expiresAt)
+      .run();
+
+    return { isReplay: false };
+  } catch (err) {
+    console.warn('Error checking/recording webhook fingerprint in D1:', err);
+    return { isReplay: false };
+  }
+}

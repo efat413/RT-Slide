@@ -34,7 +34,7 @@ import {
 } from './src/server/permissions';
 import { callSteadfastApi, normalizeSteadfastStatus } from './src/server/courier';
 import { bufferToHex, verifyPassword, hashPassword } from './src/server/auth';
-import { verifyCourierWebhookAuth, computeHmacSha256Hex } from './src/server/webhookAuth';
+import { verifyCourierWebhookAuth, computeHmacSha256Hex, computeWebhookFingerprint } from './src/server/webhookAuth';
 import { validateWebhookDestination, safeFetchWebhook } from './src/server/ssrf';
 import {
   validateImageBuffer,
@@ -45,6 +45,7 @@ import {
 } from './src/server/imageSecurity';
 
 process.env.ADMIN_SECRET = process.env.ADMIN_SECRET || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : 'dev-secret-' + Math.random().toString(36).slice(2));
+process.env.COURIER_WEBHOOK_SECRET = process.env.COURIER_WEBHOOK_SECRET || 'dev-courier-webhook-secret-999';
 
 function localApiDevPlugin(): Plugin {
   const SETTINGS_FILE = path.resolve(__dirname, '.dev-settings.json');
@@ -119,8 +120,62 @@ function localApiDevPlugin(): Plugin {
     createdAt: '2026-01-01T00:00:00.000Z',
   }));
 
+  const testHardeningUsers = [
+    {
+      id: 'test-user-update-only',
+      name: 'Product Update Only Staff',
+      email: 'updater@local.test',
+      role: 'admin',
+      permissions: {
+        'product.view': true,
+        'product.update': true,
+        'product.view_buying_price': false,
+        'product.manage_buying_price': false,
+      },
+      phone: '01800000001',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'test-user-view-only',
+      name: 'Product View Buying Price Staff',
+      email: 'viewer@local.test',
+      role: 'admin',
+      permissions: {
+        'product.view': true,
+        'product.update': true,
+        'product.view_buying_price': true,
+        'product.manage_buying_price': false,
+      },
+      phone: '01800000002',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'test-user-financial-mgr',
+      name: 'Financial Manager Admin',
+      email: 'finance@local.test',
+      role: 'admin',
+      permissions: {
+        'product.view': true,
+        'product.update': true,
+        'product.view_buying_price': true,
+        'product.manage_buying_price': true,
+      },
+      phone: '01800000003',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+    {
+      id: 'test-customer-1',
+      name: 'Customer Test User',
+      email: 'customer@local.test',
+      role: 'customer',
+      phone: '01800000004',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    },
+  ];
+
   let devUsers: any[] = [
     ...devSuperAdminAccounts,
+    ...testHardeningUsers,
     ...INITIAL_USERS.filter((u) => u.role !== 'super_admin'),
   ];
 
@@ -137,6 +192,10 @@ function localApiDevPlugin(): Plugin {
   devUserPasswordHashes.set('admin', SEED_ADMIN_HASH);
   devUserPasswordHashes.set('superadmin', SEED_ADMIN_HASH);
   devUserPasswordHashes.set('dev-admin', SEED_ADMIN_HASH);
+  devUserPasswordHashes.set('updater@local.test', SEED_STAFF_HASH);
+  devUserPasswordHashes.set('viewer@local.test', SEED_STAFF_HASH);
+  devUserPasswordHashes.set('finance@local.test', SEED_STAFF_HASH);
+  devUserPasswordHashes.set('customer@local.test', SEED_CUST_HASH);
   devUserPasswordHashes.set('subadmin@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('staff@rongdhonutrade.com', SEED_STAFF_HASH);
   devUserPasswordHashes.set('operations@rongdhonu.com', SEED_STAFF_HASH);
@@ -153,6 +212,7 @@ function localApiDevPlugin(): Plugin {
   const devPasswordResetTokens = new Map<string, { id: string; userId: string; tokenHash: string; expiresAt: number; usedAt: number | null; createdAt: number }>();
   const devRateLimits = new Map<string, { count: number; resetAt: number }>();
   const devOrderIdempotencyMap = new Map<string, { order: any; timestamp: number }>();
+  const devWebhookReplays = new Map<string, { createdAt: number; expiresAt: number }>();
 
   const checkDevRateLimit = (key: string, limit: number, windowSeconds: number): boolean => {
     const now = Date.now();
@@ -332,7 +392,12 @@ function localApiDevPlugin(): Plugin {
     if (auth.permissions) {
       if (permStr.startsWith('order.') && auth.permissions.canManageOrders) return true;
       if (permStr.startsWith('product.') && auth.permissions.canManageProducts) {
-        if (permStr === 'product.view_buying_price' || permStr === 'product.buying_price' || permStr === 'product.view_profit') return false;
+        if (
+          permStr === 'product.view_buying_price' ||
+          permStr === 'product.buying_price' ||
+          permStr === 'product.view_profit' ||
+          permStr === 'product.manage_buying_price'
+        ) return false;
         return true;
       }
       if (permStr.startsWith('category.') && auth.permissions.canManageCategories) return true;
@@ -1594,6 +1659,7 @@ function localApiDevPlugin(): Plugin {
               ? 'no-store, no-cache, must-revalidate, max-age=0'
               : 'public, max-age=30, s-maxage=60, stale-while-revalidate=30';
             res.setHeader('Cache-Control', cacheControl);
+            res.setHeader('Vary', 'Origin, Cookie, Authorization');
             res.statusCode = 200;
             if (pageParam !== null || limitParam !== null) {
               return res.end(JSON.stringify({ success: true, count: sanitized.length, total, page, limit, totalPages, products: sanitized }));
@@ -1607,11 +1673,12 @@ function localApiDevPlugin(): Plugin {
 
             return readBody((body) => {
               const isSuper = authResult.auth!.role === 'super_admin';
+              const canManageBuyingPrice = isSuper || hasDevPermission(authResult.auth!, 'product.manage_buying_price');
               const canViewBuyingPrice = isSuper || hasDevPermission(authResult.auth!, 'product.view_buying_price');
               const canViewProfit = isSuper || hasDevPermission(authResult.auth!, 'product.view_profit');
               const product = body.product || body;
               const price = Number(product.price) || 0;
-              const buyingPrice = canViewBuyingPrice
+              const buyingPrice = canManageBuyingPrice
                 ? (product.buyingPrice !== undefined && product.buyingPrice !== null ? Math.max(0, Number(product.buyingPrice)) : Math.round(price * 0.6))
                 : Math.round(price * 0.6);
 
@@ -1657,6 +1724,11 @@ function localApiDevPlugin(): Plugin {
 
           if (method === 'GET') {
             const found = devProducts.find((p) => p.id === id);
+            const singleCacheControl = (isSuperAdmin || canViewBuyingPrice || canViewProfit)
+              ? 'no-store, no-cache, must-revalidate, max-age=0'
+              : 'public, max-age=30, s-maxage=60, stale-while-revalidate=30';
+            res.setHeader('Cache-Control', singleCacheControl);
+            res.setHeader('Vary', 'Origin, Cookie, Authorization');
             res.statusCode = found ? 200 : 404;
             return res.end(JSON.stringify(found ? {
               success: true,
@@ -1669,12 +1741,13 @@ function localApiDevPlugin(): Plugin {
 
             return readBody((body) => {
               const isSuperRole = authResult.auth!.role === 'super_admin';
+              const canManageBuying = isSuperRole || hasDevPermission(authResult.auth!, 'product.manage_buying_price');
               const canViewBuying = isSuperRole || hasDevPermission(authResult.auth!, 'product.view_buying_price');
               const canViewProf = isSuperRole || hasDevPermission(authResult.auth!, 'product.view_profit');
               const updates = body.updates || body.product || body;
               const idx = devProducts.findIndex((p) => p.id === id);
               if (idx >= 0) {
-                if (!canViewBuying) {
+                if (!canManageBuying) {
                   delete updates.buyingPrice;
                   delete updates.buying_price;
                 }
@@ -3420,6 +3493,42 @@ function localApiDevPlugin(): Plugin {
                   error: authResult.error || 'Unauthorized: Courier webhook authentication failed.',
                 }));
               }
+
+              // Webhook Replay Protection: Fingerprint deduplication
+              const timestampHeader = (
+                req.headers['x-webhook-timestamp'] ||
+                req.headers['x-timestamp'] ||
+                req.headers['x-signature-timestamp'] ||
+                req.headers['x-req-timestamp'] ||
+                ''
+              ) as string;
+
+              const sigOrSecret = (
+                req.headers['x-steadfast-signature'] ||
+                req.headers['x-webhook-signature'] ||
+                req.headers['x-signature'] ||
+                req.headers['x-hub-signature-256'] ||
+                req.headers['x-signature-sha256'] ||
+                req.headers['x-webhook-secret'] ||
+                req.headers['secret-key'] ||
+                ''
+              ) as string;
+
+              const fingerprint = await computeWebhookFingerprint(rawBody, timestampHeader, sigOrSecret);
+              const nowTime = Date.now();
+              // Prune expired
+              for (const [k, v] of devWebhookReplays.entries()) {
+                if (v.expiresAt < nowTime) devWebhookReplays.delete(k);
+              }
+              const existingReplay = devWebhookReplays.get(fingerprint);
+              if (existingReplay && existingReplay.expiresAt > nowTime) {
+                res.statusCode = 409;
+                return res.end(JSON.stringify({
+                  success: false,
+                  error: 'Webhook replay rejected: This webhook request has already been processed.',
+                }));
+              }
+              devWebhookReplays.set(fingerprint, { createdAt: nowTime, expiresAt: nowTime + 600 * 1000 });
 
               const nowIso = new Date().toISOString();
               const isPing =

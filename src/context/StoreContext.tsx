@@ -750,6 +750,57 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, []);
 
+  // Targeted Stock Synchronization: Refresh only specific product IDs without downloading the entire catalog
+  const refreshProductsByIds = useCallback(async (productIds: string[]) => {
+    if (!Array.isArray(productIds) || productIds.length === 0) return;
+    const cleanIds = Array.from(new Set(productIds.filter(Boolean)));
+    if (cleanIds.length === 0) return;
+
+    try {
+      const fetched = await Promise.all(
+        cleanIds.map((id) => productsApi.getById(id).catch(() => null))
+      );
+      const valid = fetched.filter((p): p is Product => p !== null);
+      if (valid.length === 0) return;
+
+      const map = new Map(valid.map((p) => [p.id, p]));
+
+      setProducts((prev) => prev.map((p) => map.get(p.id) || p));
+
+      setHomepageCategoryProducts((prev) => {
+        let changed = false;
+        const next: Record<string, Product[]> = {};
+        for (const [catId, prods] of Object.entries(prev)) {
+          if (!Array.isArray(prods)) continue;
+          next[catId] = prods.map((p: Product) => {
+            const fresh = map.get(p.id);
+            if (fresh && fresh !== p) {
+              changed = true;
+              return fresh;
+            }
+            return p;
+          });
+        }
+        return changed ? next : prev;
+      });
+
+      setCategoryListingProducts((prev) => {
+        let changed = false;
+        const next = prev.map((p) => {
+          const fresh = map.get(p.id);
+          if (fresh && fresh !== p) {
+            changed = true;
+            return fresh;
+          }
+          return p;
+        });
+        return changed ? next : prev;
+      });
+    } catch (err) {
+      console.warn('Failed to refresh specific products by IDs:', err);
+    }
+  }, []);
+
   // Deep link initial URL parser on mount & when products/categories are loaded
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2268,10 +2319,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     setOrders((prev) => [canonicalOrder, ...prev.filter((o) => o.id !== canonicalOrder.id)]);
     clearCart();
 
-    // 5. Sync product stock from D1
-    productsApi.getAll().then((prods) => {
-      if (Array.isArray(prods)) setProducts(prods);
-    }).catch((err) => console.warn('D1 product refresh after order warning:', err));
+    // 5. Targeted D1 product stock synchronization: refresh only ordered products
+    const orderedProductIds = canonicalOrder.items.map((it) => it.product.id);
+    refreshProductsByIds(orderedProductIds).catch((err) =>
+      console.warn('D1 product refresh after order warning:', err)
+    );
 
     // 6. High-Accuracy Purchase Synchronization with Meta, TikTok & GTM dataLayer
     trackEvent(
@@ -2849,8 +2901,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (err: any) {
       const errorMsg = err?.message || 'Failed to delete product from D1 database';
       console.error('D1 deleteProduct error:', err);
-      // Re-sync products to restore valid state
-      productsApi.getAll().then((prods) => { if (Array.isArray(prods)) setProducts(prods); }).catch(() => {});
+      // Re-sync specific product to restore valid state
+      refreshProductsByIds([id]).catch(() => {});
       showNotification('error', 'Deletion Failed', errorMsg, 6000);
       return { success: false, error: errorMsg };
     }
@@ -3375,11 +3427,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       prev.map((ord) => (ord.id === orderId ? (updatedOrder || { ...ord, shippingStatus: status }) : ord))
     );
 
-    // If order was cancelled, immediately sync products so restored stock is reflected across the app
+    // If order was cancelled, immediately sync affected products so restored stock is reflected across the app
     if (status === 'Cancelled' || target?.shippingStatus === 'Cancelled') {
-      productsApi.getAll().then((prods) => {
-        if (Array.isArray(prods)) setProducts(prods);
-      }).catch((err) => console.warn('Failed to sync products after cancellation:', err));
+      const affectedIds = target?.items ? target.items.map((it) => it.product.id) : [];
+      refreshProductsByIds(affectedIds).catch((err) =>
+        console.warn('Failed to sync products after cancellation:', err)
+      );
     }
 
     showNotification(
@@ -3726,10 +3779,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     setOrders((prev) => prev.filter((o) => o.id !== orderId));
 
-    if (restoreStock) {
-      productsApi.getAll().then((prods) => {
-        if (Array.isArray(prods)) setProducts(prods);
-      }).catch((err) => console.warn('Failed to sync products after order deletion:', err));
+    if (restoreStock && targetOrder.items) {
+      const affectedIds = targetOrder.items.map((it) => it.product.id);
+      refreshProductsByIds(affectedIds).catch((err) =>
+        console.warn('Failed to sync products after order deletion:', err)
+      );
     }
 
     showNotification('success', 'Order Deleted', `Order #${targetOrder.orderNumber} deleted from D1.`);
@@ -3826,10 +3880,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       prev.map((ord) => (ord.id === orderId ? (updatedOrder || { ...ord, shippingStatus: 'Cancelled' }) : ord))
     );
 
-    // Sync product stock from D1 (restored by D1 on server)
-    productsApi.getAll().then((prods) => {
-      if (Array.isArray(prods)) setProducts(prods);
-    }).catch((err) => console.warn('Failed to sync products after customer order cancel:', err));
+    // Sync product stock from D1 for affected products only (restored by D1 on server)
+    if (targetOrder.items) {
+      const affectedIds = targetOrder.items.map((it) => it.product.id);
+      refreshProductsByIds(affectedIds).catch((err) =>
+        console.warn('Failed to sync products after customer order cancel:', err)
+      );
+    }
 
     return {
       success: true,
