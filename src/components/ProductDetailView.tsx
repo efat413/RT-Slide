@@ -75,7 +75,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
   const [selectedColor, setSelectedColor] = useState<string | undefined>(undefined);
   const [addedNotice, setAddedNotice] = useState(false);
   const [selectedImageIdx, setSelectedImageIdx] = useState(0);
-  const [activeTab, setActiveTab] = useState<'overview' | 'specs' | 'reviews'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'reviews'>('overview');
   const [isFullscreenOpen, setIsFullscreenOpen] = useState(false);
 
   // Review Form State
@@ -806,7 +806,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
           </div>
         </div>
 
-        {/* Bottom Section: Tabs for Description, Specifications, and Reviews */}
+        {/* Bottom Section: Tabs for Description & Details and Reviews */}
         <section id="product-tabs-section" className="border-t border-slate-200 bg-slate-50/50 p-4 sm:p-6 lg:p-8">
           <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
             <button
@@ -821,20 +821,6 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
               Description & Details
             </button>
 
-            {product.specs && product.specs.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveTab('specs')}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
-                  activeTab === 'specs'
-                    ? 'bg-slate-900 text-white shadow-xs'
-                    : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
-                }`}
-              >
-                Specifications ({product.specs.length})
-              </button>
-            )}
-
             <button
               type="button"
               onClick={() => setActiveTab('reviews')}
@@ -848,32 +834,32 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
             </button>
           </div>
 
-          {/* Tab 1: Overview */}
+          {/* Tab 1: Description & Details */}
           {activeTab === 'overview' && (
-            <div className="pt-6 max-w-3xl">
+            <div className="pt-6 max-w-3xl space-y-6">
               <FormattedDescription content={product.description} />
+
+              {product.specs && product.specs.length > 0 && (
+                <div className="pt-2">
+                  <h3 className="text-sm font-bold text-slate-900 mb-3">Specifications</h3>
+                  <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs divide-y divide-slate-100">
+                    {product.specs.map((spec, sIdx) => {
+                      const [key, ...rest] = spec.split(':');
+                      const value = rest.join(':');
+                      return (
+                        <div key={sIdx} className="grid grid-cols-3 p-3 sm:p-4 text-xs">
+                          <span className="font-bold text-slate-700">{key.trim()}</span>
+                          <span className="col-span-2 text-slate-600">{value ? value.trim() : spec}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {/* Tab 2: Specifications */}
-          {activeTab === 'specs' && product.specs && product.specs.length > 0 && (
-            <div className="pt-6 max-w-2xl">
-              <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-2xs divide-y divide-slate-100">
-                {product.specs.map((spec, sIdx) => {
-                  const [key, ...rest] = spec.split(':');
-                  const value = rest.join(':');
-                  return (
-                    <div key={sIdx} className="grid grid-cols-3 p-3 sm:p-4 text-xs">
-                      <span className="font-bold text-slate-700">{key.trim()}</span>
-                      <span className="col-span-2 text-slate-600">{value ? value.trim() : spec}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Tab 3: Reviews */}
+          {/* Tab 2: Reviews */}
           {activeTab === 'reviews' && (
             <div className="pt-6 grid grid-cols-1 lg:grid-cols-12 gap-8">
               {/* Existing Reviews List */}
