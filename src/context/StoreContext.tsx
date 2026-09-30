@@ -1030,7 +1030,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           {
             title: catSeo.title,
             description: catSeo.description,
-            canonicalUrl: `${SITE_DOMAIN}/?category=${encodeURIComponent(cat.slug || cat.id)}`,
+            canonicalUrl: `${SITE_DOMAIN}/category/${encodeURIComponent(cat.slug || cat.id)}`,
             ogType: 'website',
             ogImage: settings.logoUrl || DEFAULT_FALLBACK_IMAGE,
             category: cat,
@@ -1038,7 +1038,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               { name: 'Home', url: `${SITE_DOMAIN}/` },
               {
                 name: cat.name,
-                url: `${SITE_DOMAIN}/?category=${encodeURIComponent(cat.slug || cat.id)}`,
+                url: `${SITE_DOMAIN}/category/${encodeURIComponent(cat.slug || cat.id)}`,
               },
             ],
           },

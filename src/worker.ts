@@ -276,6 +276,12 @@ export default {
           );
         }
 
+        // Graceful migration from old ?category= query URLs to canonical /category/:slug route (301 Permanent Redirect)
+        if (url.searchParams.has('category') || url.searchParams.has('cat')) {
+          const canonicalUrl = new URL(`/category/${encodeURIComponent(category.slug || category.id)}`, url.origin);
+          return Response.redirect(canonicalUrl.toString(), 301);
+        }
+
         // Category is valid: Generate Server-Side Rendered SEO HTML response with HTTP 200
         let siteName = DEFAULT_SITE_NAME;
         if (env.DB) {

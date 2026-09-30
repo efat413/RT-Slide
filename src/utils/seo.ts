@@ -809,7 +809,7 @@ export function generateSitemapXml(
     if (!cat || !cat.id) continue;
     const slug = (cat.slug || cat.id).trim();
     if (!slug) continue;
-    addUrl(`${SITE_DOMAIN}/?category=${encodeURIComponent(slug)}`, lastModDate, 'daily', '0.8');
+    addUrl(`${SITE_DOMAIN}/category/${encodeURIComponent(slug)}`, lastModDate, 'daily', '0.8');
   }
 
   // Active Product Pages (strictly exclude inactive or deleted products)
@@ -948,7 +948,11 @@ export function injectProductSEOIntoHtml(
   modified = modified.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtmlAttr(meta.description)}" />`);
 
   // Replace Canonical
-  modified = modified.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${escapeHtmlAttr(meta.canonicalUrl)}" />`);
+  if (/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i.test(modified)) {
+    modified = modified.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${escapeHtmlAttr(meta.canonicalUrl)}" />`);
+  } else if (modified.includes('</head>')) {
+    modified = modified.replace('</head>', `  <link rel="canonical" href="${escapeHtmlAttr(meta.canonicalUrl)}" />\n</head>`);
+  }
 
   // Ensure index, follow for active products
   modified = modified.replace(/<meta\s+name="robots"\s+content=".*?"\s*\/?>/i, `<meta name="robots" content="index, follow" />`);
@@ -1031,7 +1035,7 @@ export function injectCategorySEOIntoHtml(
   siteName: string = DEFAULT_SITE_NAME
 ): string {
   const catSeo = getCategorySEOData(category, siteName);
-  const canonicalUrl = `${SITE_DOMAIN}/?category=${encodeURIComponent(category.slug || category.id)}`;
+  const canonicalUrl = `${SITE_DOMAIN}/category/${encodeURIComponent(category.slug || category.id)}`;
   const breadcrumbs = [
     { name: 'Home', url: `${SITE_DOMAIN}/` },
     { name: category.name, url: canonicalUrl },
@@ -1058,7 +1062,11 @@ export function injectCategorySEOIntoHtml(
   modified = modified.replace(/<meta\s+name="description"\s+content=".*?"\s*\/?>/i, `<meta name="description" content="${escapeHtmlAttr(catSeo.description)}" />`);
 
   // Replace Canonical
-  modified = modified.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${escapeHtmlAttr(canonicalUrl)}" />`);
+  if (/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i.test(modified)) {
+    modified = modified.replace(/<link\s+rel="canonical"\s+href=".*?"\s*\/?>/i, `<link rel="canonical" href="${escapeHtmlAttr(canonicalUrl)}" />`);
+  } else if (modified.includes('</head>')) {
+    modified = modified.replace('</head>', `  <link rel="canonical" href="${escapeHtmlAttr(canonicalUrl)}" />\n</head>`);
+  }
 
   // Ensure index, follow
   modified = modified.replace(/<meta\s+name="robots"\s+content=".*?"\s*\/?>/i, `<meta name="robots" content="index, follow" />`);

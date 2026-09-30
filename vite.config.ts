@@ -659,7 +659,7 @@ function localApiDevPlugin(): Plugin {
         }
 
         // Technical SEO: Check for invalid or deleted products to avoid soft 404s
-        if (url.searchParams.has('product') || url.searchParams.has('p') || url.pathname.startsWith('/product/')) {
+        if (!req.url?.startsWith('/api/') && (url.searchParams.has('product') || url.searchParams.has('p') || url.pathname.startsWith('/product/'))) {
           const prodParam = (
             url.searchParams.get('product') ||
             url.searchParams.get('p') ||
@@ -691,7 +691,7 @@ function localApiDevPlugin(): Plugin {
         }
 
         // Technical SEO: Check for invalid categories
-        if (url.searchParams.has('category') || url.searchParams.has('cat') || url.pathname.startsWith('/category/')) {
+        if (!req.url?.startsWith('/api/') && (url.searchParams.has('category') || url.searchParams.has('cat') || url.pathname.startsWith('/category/'))) {
           const catParam = (
             url.searchParams.get('category') ||
             url.searchParams.get('cat') ||
@@ -709,6 +709,14 @@ function localApiDevPlugin(): Plugin {
               res.setHeader('X-Robots-Tag', 'noindex, follow');
               res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
               return res.end(generate404Html('Category Not Found', `The category "${catParam}" was not found.`));
+            }
+
+            // Graceful migration from old ?category= query URLs to canonical /category/:slug route (301 Permanent Redirect)
+            if (url.searchParams.has('category') || url.searchParams.has('cat')) {
+              res.writeHead(301, {
+                Location: `/category/${encodeURIComponent(foundCat.slug || foundCat.id)}`,
+              });
+              return res.end();
             }
           }
         }

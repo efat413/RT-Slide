@@ -166,7 +166,7 @@ async function runVerification() {
   );
 
   // 2.3 Canonical URL
-  const expectedCatCanonical = `${SITE_DOMAIN}/?category=${encodeURIComponent(cat.slug || cat.id)}`;
+  const expectedCatCanonical = `${SITE_DOMAIN}/category/${encodeURIComponent(cat.slug || cat.id)}`;
   assert(
     categoryHtml.includes(`<link rel="canonical" href="${expectedCatCanonical}" />`),
     '2.3 Category canonical URL matches category slug'
@@ -315,7 +315,8 @@ async function runVerification() {
   const sitemap = generateSitemapXml(INITIAL_CATEGORIES, INITIAL_PRODUCTS);
   assert(
     sitemap.includes('<loc>https://rongdhonutrade.com/</loc>') &&
-    sitemap.includes('https://rongdhonutrade.com/?category=') &&
+    sitemap.includes('https://rongdhonutrade.com/category/') &&
+    !sitemap.includes('?category=') &&
     sitemap.includes('https://rongdhonutrade.com/product/') &&
     !sitemap.includes('?product=') &&
     !sitemap.includes('/admin') &&

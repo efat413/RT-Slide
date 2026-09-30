@@ -35,7 +35,8 @@ async function runRegressionSuite() {
   const sitemapXml = generateSitemapXml(INITIAL_CATEGORIES, INITIAL_PRODUCTS);
   assert(sitemapXml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'), 'TEST 14.1: sitemap starts with XML declaration');
   assert(sitemapXml.includes('<loc>https://rongdhonutrade.com/</loc>'), 'TEST 14.2: sitemap includes homepage canonical URL');
-  assert(sitemapXml.includes('https://rongdhonutrade.com/?category=mens-accessories'), 'TEST 14.3: sitemap includes category canonical URLs');
+  assert(sitemapXml.includes('https://rongdhonutrade.com/category/mens-accessories'), 'TEST 14.3: sitemap includes category canonical URLs');
+  assert(!sitemapXml.includes('?category='), 'TEST 14.3b: sitemap does not include old ?category= query URLs');
   assert(sitemapXml.includes('https://rongdhonutrade.com/product/prod-wallet-01'), 'TEST 14.4: sitemap includes product canonical URLs');
   assert(!sitemapXml.includes('?product='), 'TEST 14.4b: sitemap does not include old ?product= query URLs');
   assert(!sitemapXml.includes('/admin'), 'TEST 14.5: sitemap excludes /admin');
