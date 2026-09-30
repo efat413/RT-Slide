@@ -650,7 +650,27 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [productNotFound, setProductNotFound] = useState<boolean>(false);
   const [adminActiveTab, setAdminActiveTab] = useState<string>('overview');
   const [adminSettingsSection, setAdminSettingsSection] = useState<string>('all');
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const pathname = window.location.pathname;
+      if (pathname === '/reset-password' || pathname === '/admin' || pathname.startsWith('/admin/')) {
+        return null;
+      }
+      if (pathname.startsWith('/category/')) {
+        const raw = decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
+        return raw || null;
+      }
+      if (pathname === '/featured') {
+        return 'featured';
+      }
+      const params = new URLSearchParams(window.location.search);
+      const cat = params.get('category') || params.get('cat');
+      if (cat) return cat.trim();
+      if (params.get('featured') === 'true') return 'featured';
+    } catch {}
+    return null;
+  });
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isCartOpen, setIsCartOpen] = useState<boolean>(false);
   const [quickViewProduct, setQuickViewProduct] = useState<Product | null>(null);
@@ -830,6 +850,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       if (!categoryParam && pathname.startsWith('/category/')) {
         categoryParam = decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
       }
+      if (!categoryParam && (pathname === '/featured' || urlParams.get('featured') === 'true')) {
+        categoryParam = 'featured';
+      }
 
       const searchParam = urlParams.get('search') || urlParams.get('q') || urlParams.get('s');
       const pageParam = urlParams.get('page');
@@ -851,11 +874,22 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (categoryParam) {
-        const matchedCategory = categories.find(
-          (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
-        );
-        if (matchedCategory) {
-          setSelectedCategory(matchedCategory.id);
+        if (categoryParam.toLowerCase() === 'featured' || pathname === '/featured') {
+          setSelectedCategory('featured');
+          _setCurrentView('store');
+        } else if (categories.length > 0) {
+          const matchedCategory = categories.find(
+            (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
+          );
+          if (matchedCategory) {
+            setSelectedCategory(matchedCategory.id);
+            _setCurrentView('store');
+          } else {
+            setSelectedCategory(categoryParam);
+            _setCurrentView('store');
+          }
+        } else {
+          setSelectedCategory(categoryParam);
           _setCurrentView('store');
         }
       }
@@ -883,9 +917,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
 
       if (selectedCategory) {
-        const cat = categories.find((c) => c.id === selectedCategory);
+        const cat = categories.find((c) => c.id === selectedCategory || c.slug === selectedCategory);
         const catSlug = cat?.slug || selectedCategory;
-        if (window.location.pathname.startsWith('/category/')) {
+        if (selectedCategory === 'featured' || window.location.pathname === '/featured') {
+          url.pathname = '/featured';
+          url.searchParams.delete('category');
+          url.searchParams.delete('cat');
+          url.searchParams.delete('featured');
+        } else if (window.location.pathname.startsWith('/category/') || !url.searchParams.has('category')) {
           url.pathname = `/category/${encodeURIComponent(catSlug)}`;
           url.searchParams.delete('category');
           url.searchParams.delete('cat');
@@ -893,11 +932,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           url.searchParams.set('category', catSlug);
         }
       } else {
-        if (window.location.pathname.startsWith('/category/')) {
+        if (window.location.pathname.startsWith('/category/') || window.location.pathname === '/featured') {
+          // If store is still initializing or categories haven't loaded yet, do NOT wipe the category URL!
+          if (isStoreInitializing || categories.length === 0) {
+            return;
+          }
           url.pathname = '/';
         }
         url.searchParams.delete('category');
         url.searchParams.delete('cat');
+        url.searchParams.delete('featured');
       }
 
       if (searchQuery.trim()) {
@@ -922,7 +966,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {
       console.error('Error syncing URL params', e);
     }
-  }, [currentView, selectedProductId, selectedCategory, searchQuery, categories, categoryPage]);
+  }, [currentView, selectedProductId, selectedCategory, searchQuery, categories, categoryPage, isStoreInitializing]);
 
   // Support native browser back and forward navigation
   useEffect(() => {
@@ -952,6 +996,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         if (!categoryParam && pathname.startsWith('/category/')) {
           categoryParam = decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
         }
+        if (!categoryParam && (pathname === '/featured' || urlParams.get('featured') === 'true')) {
+          categoryParam = 'featured';
+        }
 
         const searchParam = urlParams.get('search') || urlParams.get('q') || urlParams.get('s');
         const pageParam = urlParams.get('page');
@@ -979,11 +1026,16 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
 
         if (categoryParam) {
-          const matchedCategory = categories.find(
-            (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
-          );
-          setSelectedCategory(matchedCategory ? matchedCategory.id : null);
-          _setCurrentView('store');
+          if (categoryParam.toLowerCase() === 'featured' || pathname === '/featured') {
+            setSelectedCategory('featured');
+            _setCurrentView('store');
+          } else {
+            const matchedCategory = categories.find(
+              (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
+            );
+            setSelectedCategory(matchedCategory ? matchedCategory.id : categoryParam);
+            _setCurrentView('store');
+          }
         } else {
           setSelectedCategory(null);
           _setCurrentView('store');
@@ -1081,8 +1133,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     // 3. Category View
-    if (selectedCategory) {
-      const cat = categories.find((c) => c.id === selectedCategory);
+    if (selectedCategory && selectedCategory !== 'featured') {
+      const cat = categories.find((c) => c.id === selectedCategory || c.slug === selectedCategory);
       if (cat) {
         const catSeo = getCategorySEOData(cat, settings.siteName);
         applyClientSEO(
@@ -1464,9 +1516,14 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const isFeaturedCategory = selectedCategory === 'featured';
 
+    const catObj = categories.find((c) => c.id === selectedCategory || c.slug === selectedCategory);
+    const categoryParamForApi = isFeaturedCategory
+      ? undefined
+      : (catObj ? catObj.id : (selectedCategory || undefined));
+
     productsApi
       .getPaginated({
-        category: isFeaturedCategory ? undefined : (selectedCategory || undefined),
+        category: categoryParamForApi,
         search: searchQuery.trim() || undefined,
         featured: isFeaturedCategory ? true : undefined,
         page: categoryPage,
@@ -1499,7 +1556,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return () => {
       isCancelled = true;
     };
-  }, [selectedCategory, searchQuery, categoryPage, categorySortBy]);
+  }, [selectedCategory, searchQuery, categoryPage, categorySortBy, categories]);
 
   // Load complete catalog when switching to admin view
   useEffect(() => {

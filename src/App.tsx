@@ -128,6 +128,10 @@ const StoreContent: React.FC = () => {
     }
 
     if (cat && categories.length > 0) {
+      if (cat.toLowerCase() === 'featured') {
+        setInvalidNotice(null);
+        return;
+      }
       const found = categories.some((c) => c.slug.toLowerCase() === cat.toLowerCase() || c.id === cat);
       if (!found) {
         setInvalidNotice(`The category "${cat}" was not found.`);
@@ -335,7 +339,7 @@ const StoreContent: React.FC = () => {
     );
   }
 
-  const activeCategoryObj = categories.find((c) => c.id === selectedCategory);
+  const activeCategoryObj = categories.find((c) => c.id === selectedCategory || c.slug === selectedCategory);
   const supportWhatsAppNumber = settings.footer?.supportWhatsApp || settings.phone || '';
   const floatingWhatsAppHref = formatWhatsAppLink(
     supportWhatsAppNumber,
