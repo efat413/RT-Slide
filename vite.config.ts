@@ -818,6 +818,9 @@ function localApiDevPlugin(): Plugin {
         };
 
         res.setHeader('Content-Type', 'application/json');
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+        res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
         res.setHeader('Vary', 'Origin');
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
 
@@ -2948,8 +2951,6 @@ function localApiDevPlugin(): Plugin {
                   for (const [hName, hVal] of Object.entries(headers)) {
                     res.setHeader(hName, hVal);
                   }
-                  res.setHeader('X-Image-Transform', 'sharp-webp');
-                  res.setHeader('X-Image-Width', String(targetWidth));
                   res.setHeader('Content-Length', String(webpBuffer.length));
                   res.statusCode = 200;
                   return res.end(webpBuffer);
@@ -2959,8 +2960,6 @@ function localApiDevPlugin(): Plugin {
                   for (const [hName, hVal] of Object.entries(headers)) {
                     res.setHeader(hName, hVal);
                   }
-                  res.setHeader('X-Image-Transform', 'sharp-resized');
-                  res.setHeader('X-Image-Width', String(targetWidth));
                   res.setHeader('Content-Length', String(resizedBuffer.length));
                   res.statusCode = 200;
                   return res.end(resizedBuffer);

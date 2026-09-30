@@ -2606,8 +2606,6 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
                 headers: {
                   ...getSafeMediaHeaders('image/webp'),
                   ...getCorsHeaders(request, env),
-                  'X-Image-Transform': 'sharp-webp',
-                  'X-Image-Width': String(targetWidth),
                   'Content-Length': String(webpBuffer.byteLength),
                 },
               });
@@ -2618,8 +2616,6 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
                 headers: {
                   ...getSafeMediaHeaders(contentType),
                   ...getCorsHeaders(request, env),
-                  'X-Image-Transform': 'sharp-resized',
-                  'X-Image-Width': String(targetWidth),
                   'Content-Length': String(resizedBuffer.byteLength),
                 },
               });

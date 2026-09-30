@@ -2,40 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (function() {
-        try {
-          var win = window;
-          var nativeFetch = typeof win.fetch === 'function' ? win.fetch.bind(win) : null;
-          
-          if (typeof Window !== 'undefined' && Window.prototype) {
-            try {
-              var protoDesc = Object.getOwnPropertyDescriptor(Window.prototype, 'fetch');
-              if (protoDesc && !protoDesc.set && protoDesc.configurable) {
-                Object.defineProperty(Window.prototype, 'fetch', {
-                  get: function() { return nativeFetch; },
-                  set: function(fn) { nativeFetch = fn; },
-                  configurable: true,
-                  enumerable: true
-                });
-              }
-            } catch (err) {}
-          }
-
-          try {
-            var winDesc = Object.getOwnPropertyDescriptor(win, 'fetch');
-            if (!winDesc || (!winDesc.set && winDesc.configurable !== false)) {
-              Object.defineProperty(win, 'fetch', {
-                get: function() { return nativeFetch; },
-                set: function(fn) { nativeFetch = fn; },
-                configurable: true,
-                enumerable: true
-              });
-            }
-          } catch (err) {}
-        } catch (e) {}
-      })();
-    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/jpeg" href="https://i.pinimg.com/736x/bb/fe/59/bbfe59570509bbc00e9d703fd45ada18.jpg" />
     <title>Rongodhonu Trade | রঙধনু ট্রেড - Online Shopping in Bangladesh</title>
@@ -121,15 +87,9 @@
 
 
 
-                <!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-CKJLJSDKFZ"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-CKJLJSDKFZ');
-</script>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-CKJLJSDKFZ"></script>
+    <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-CKJLJSDKFZ');</script>
 
 
   </head>
