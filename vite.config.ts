@@ -267,11 +267,13 @@ function localApiDevPlugin(): Plugin {
         if (currentHash && decoded.pwdSig !== undefined) {
           const expectedSig = computeDevPasswordSig(currentHash);
           const tokenSig = decoded.pwdSig;
+          // Hardened session validation: Strictly accept only the secure 32-character SHA-256 signature
+          // Legacy 16-character prefix signatures are unconditionally rejected
           const isSigValid = Boolean(
             tokenSig &&
-            (tokenSig.length === 16
-              ? tokenSig === currentHash.slice(0, 16)
-              : tokenSig === expectedSig)
+            typeof tokenSig === 'string' &&
+            tokenSig.length === 32 &&
+            tokenSig === expectedSig
           );
           if (!isSigValid) {
             return {

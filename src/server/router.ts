@@ -591,15 +591,17 @@ async function requireAuth(
     };
   }
 
-  // Session Invalidation: If user has a password in D1, verify token carries valid pwdSig
+  // Session Invalidation: If user has a password in D1, verify token carries valid 32-character pwdSig
   if (dbUser.password) {
     const expectedSig = await computePasswordSignature(dbUser.password);
     const tokenSig = tokenUser.pwdSig;
+    // Hardened session validation: Strictly accept only the secure 32-character SHA-256 signature
+    // Legacy 16-character prefix signatures are unconditionally rejected
     const isSigValid = Boolean(
       tokenSig &&
-      (tokenSig.length === 16
-        ? tokenSig === dbUser.password.slice(0, 16)
-        : tokenSig === expectedSig)
+      typeof tokenSig === 'string' &&
+      tokenSig.length === 32 &&
+      tokenSig === expectedSig
     );
 
     if (!isSigValid) {

@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { resolve, join } from 'path';
+import { createAuthToken, getAuthSecret } from '../src/server/auth';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -189,6 +190,16 @@ async function runTests() {
     'Session invalidation: requireAuth rejects stale tokens after password change'
   );
 
+  // 10. Verify legacy 16-character pwdSig fallback has been completely removed
+  assert(
+    !routerCode.includes('tokenSig.length === 16'),
+    'Legacy 16-character pwdSig compatibility branch is completely removed from router.ts'
+  );
+  assert(
+    routerCode.includes('tokenSig.length === 32'),
+    'Strict 32-character SHA-256 signature length check is enforced in router.ts'
+  );
+
   // =================================================================
   // LIVE HTTP API INTEGRATION TESTS (against dev server)
   // =================================================================
@@ -372,6 +383,32 @@ async function runTests() {
   });
   const loginData = await loginRes.json();
   assert(loginRes.status === 200 && loginData.success, 'Login with new password succeeded');
+
+  // 11. Verify token with legacy 16-character pwdSig is REJECTED with 401
+  const secret = getAuthSecret({ DEV: true });
+  const legacy16Token = await createAuthToken(
+    {
+      userId,
+      email: testEmail,
+      role: 'customer',
+      pwdSig: 'pbkdf2:100000:07', // 16-character legacy signature format
+    },
+    secret
+  );
+  const legacyRes = await fetch(`${baseUrl}/api/auth/me`, {
+    headers: {
+      Cookie: `auth_token=${encodeURIComponent(legacy16Token)}`,
+    },
+  });
+  assert(
+    legacyRes.status === 401,
+    'Legacy 16-character session signature format is strictly rejected with 401 Unauthorized'
+  );
+  const legacyBody = await legacyRes.json();
+  assert(
+    legacyBody.error?.includes('Session invalidated or password was changed'),
+    'Rejection message clearly instructs that session is invalidated and requires re-login'
+  );
 
   console.log('\n================================================================');
   console.log('ALL ISSUE 1 & ISSUE 2 VERIFICATIONS PASSED SUCCESSFULLY!');
