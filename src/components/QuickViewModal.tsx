@@ -580,8 +580,158 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
               )}
             </div>
 
+            {/* Variant Selectors: Size & Color */}
+            {((product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0)) && (
+              <div className="space-y-3 pt-3 border-t border-slate-100">
+                {/* Size Selector */}
+                {product.sizes && product.sizes.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Available Sizes:
+                      </span>
+                      <span className="text-xs font-extrabold text-rose-600">
+                        {selectedSize ? `Selected: ${selectedSize}` : 'Choose a size'}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {product.sizes.map((sz) => (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => setSelectedSize(sz)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            selectedSize === sz
+                              ? 'bg-slate-900 text-white shadow-xs scale-105 ring-2 ring-slate-900/20'
+                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          }`}
+                        >
+                          {sz}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Color Selector */}
+                {product.colors && product.colors.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                        Available Colors:
+                      </span>
+                      <span className="text-xs font-extrabold text-rose-600 flex items-center gap-1.5">
+                        {selectedColor ? (
+                          <>
+                            <span className="text-slate-500 font-medium">Selected:</span>
+                            <span
+                              className="w-3 h-3 rounded-full border border-black/15 shadow-2xs inline-block"
+                              style={{ backgroundColor: parseColorOption(selectedColor).hex }}
+                            />
+                            <span>{parseColorOption(selectedColor).name}</span>
+                          </>
+                        ) : (
+                          'Choose a color'
+                        )}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {product.colors.map((col) => {
+                        const parsed = parseColorOption(col);
+                        const isSelected = selectedColor === col;
+                        return (
+                          <button
+                            key={col}
+                            type="button"
+                            onClick={() => setSelectedColor(col)}
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border shadow-2xs ${
+                              isSelected
+                                ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-rose-500 scale-105'
+                                : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span
+                              className={`w-3.5 h-3.5 rounded-full border shadow-2xs shrink-0 flex items-center justify-center transition-transform ${
+                                parsed.isLight ? 'border-slate-300' : 'border-black/20'
+                              }`}
+                              style={{ backgroundColor: parsed.hex }}
+                            >
+                              {isSelected && (
+                                <Check className={`w-2.5 h-2.5 ${parsed.isLight ? 'text-black' : 'text-white'}`} />
+                              )}
+                            </span>
+                            <span>{parsed.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Quantity and Actions */}
+            <div className="pt-3 border-t border-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+                  Quantity
+                </span>
+                <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
+                  <button
+                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                    disabled={quantity <= 1}
+                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold disabled:opacity-40"
+                  >
+                    -
+                  </button>
+                  <span className="px-4 py-1.5 text-sm font-bold text-slate-800 bg-white">
+                    {quantity}
+                  </span>
+                  <button
+                    onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
+                    disabled={quantity >= product.stock}
+                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* CTAs */}
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  id="modal-add-to-cart-btn"
+                  onClick={handleAddToCart}
+                  disabled={product.stock === 0}
+                  className="py-3 px-4 rounded-xl border-2 border-rose-500 text-rose-600 font-bold text-xs flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-95 transition-all disabled:opacity-50"
+                >
+                  {addedNotice ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-600" />
+                      Added!
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="w-4 h-4" />
+                      Add to Cart
+                    </>
+                  )}
+                </button>
+
+                <button
+                  id="modal-quick-buy-btn"
+                  onClick={handleQuickBuy}
+                  disabled={product.stock === 0}
+                  className="py-3 px-4 rounded-xl bg-slate-900 hover:bg-black active:bg-slate-950 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all disabled:opacity-50"
+                >
+                  <ShoppingBag className="w-4 h-4 text-amber-400" />
+                  Buy Now
+                </button>
+              </div>
+            </div>
+
             {/* View Switcher Tabs: Overview vs Reviews */}
-            <div className="flex items-center gap-2 mt-4 border-b border-slate-200">
+            <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-200">
               <button
                 type="button"
                 onClick={() => setActiveTab('overview')}
@@ -803,156 +953,6 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Variant Selectors: Size & Color */}
-            {((product.sizes && product.sizes.length > 0) || (product.colors && product.colors.length > 0)) && (
-              <div className="space-y-3 pt-3 border-t border-slate-100">
-                {/* Size Selector */}
-                {product.sizes && product.sizes.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                        Available Sizes:
-                      </span>
-                      <span className="text-xs font-extrabold text-rose-600">
-                        {selectedSize ? `Selected: ${selectedSize}` : 'Choose a size'}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {product.sizes.map((sz) => (
-                        <button
-                          key={sz}
-                          type="button"
-                          onClick={() => setSelectedSize(sz)}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            selectedSize === sz
-                              ? 'bg-slate-900 text-white shadow-xs scale-105 ring-2 ring-slate-900/20'
-                              : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                          }`}
-                        >
-                          {sz}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Color Selector */}
-                {product.colors && product.colors.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                        Available Colors:
-                      </span>
-                      <span className="text-xs font-extrabold text-rose-600 flex items-center gap-1.5">
-                        {selectedColor ? (
-                          <>
-                            <span className="text-slate-500 font-medium">Selected:</span>
-                            <span
-                              className="w-3 h-3 rounded-full border border-black/15 shadow-2xs inline-block"
-                              style={{ backgroundColor: parseColorOption(selectedColor).hex }}
-                            />
-                            <span>{parseColorOption(selectedColor).name}</span>
-                          </>
-                        ) : (
-                          'Choose a color'
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {product.colors.map((col) => {
-                        const parsed = parseColorOption(col);
-                        const isSelected = selectedColor === col;
-                        return (
-                          <button
-                            key={col}
-                            type="button"
-                            onClick={() => setSelectedColor(col)}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center gap-2 border shadow-2xs ${
-                              isSelected
-                                ? 'bg-slate-900 text-white border-slate-900 ring-2 ring-rose-500 scale-105'
-                                : 'bg-white text-slate-800 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-                            }`}
-                          >
-                            <span
-                              className={`w-3.5 h-3.5 rounded-full border shadow-2xs shrink-0 flex items-center justify-center transition-transform ${
-                                parsed.isLight ? 'border-slate-300' : 'border-black/20'
-                              }`}
-                              style={{ backgroundColor: parsed.hex }}
-                            >
-                              {isSelected && (
-                                <Check className={`w-2.5 h-2.5 ${parsed.isLight ? 'text-black' : 'text-white'}`} />
-                              )}
-                            </span>
-                            <span>{parsed.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Quantity and Actions */}
-            <div className="pt-4 border-t border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  Quantity
-                </span>
-                <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden bg-slate-50">
-                  <button
-                    onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-                    disabled={quantity <= 1}
-                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold disabled:opacity-40"
-                  >
-                    -
-                  </button>
-                  <span className="px-4 py-1.5 text-sm font-bold text-slate-800 bg-white">
-                    {quantity}
-                  </span>
-                  <button
-                    onClick={() => setQuantity((q) => Math.min(product.stock, q + 1))}
-                    disabled={quantity >= product.stock}
-                    className="px-3 py-1.5 text-slate-600 hover:bg-slate-200 transition-colors font-bold disabled:opacity-40"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              {/* CTAs */}
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  id="modal-add-to-cart-btn"
-                  onClick={handleAddToCart}
-                  disabled={product.stock === 0}
-                  className="py-3 px-4 rounded-xl border-2 border-rose-500 text-rose-600 font-bold text-xs flex items-center justify-center gap-2 hover:bg-rose-50 active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {addedNotice ? (
-                    <>
-                      <Check className="w-4 h-4 text-emerald-600" />
-                      Added!
-                    </>
-                  ) : (
-                    <>
-                      <ShoppingCart className="w-4 h-4" />
-                      Add to Cart
-                    </>
-                  )}
-                </button>
-
-                <button
-                  id="modal-quick-buy-btn"
-                  onClick={handleQuickBuy}
-                  disabled={product.stock === 0}
-                  className="py-3 px-4 rounded-xl bg-slate-900 hover:bg-black active:bg-slate-950 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg active:scale-95 transition-all disabled:opacity-50"
-                >
-                  <ShoppingBag className="w-4 h-4 text-amber-400" />
-                  Buy Now
-                </button>
-              </div>
             </div>
           </div>
         </div>

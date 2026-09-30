@@ -660,7 +660,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
               {product.colors && product.colors.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-bold text-slate-700">Color:</span>
+                    <span className="font-bold text-slate-700">Available Colors:</span>
                     <span className="font-semibold text-rose-600">
                       {selectedColor ? parseColorOption(selectedColor).name : 'Choose a color'}
                     </span>
