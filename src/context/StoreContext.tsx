@@ -1909,9 +1909,23 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [wishlist]);
 
   const toggleWishlist = (productId: string) => {
-    setWishlist((prev) =>
-      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
-    );
+    setWishlist((prev) => {
+      const willAdd = !prev.includes(productId);
+      if (willAdd) {
+        showNotification(
+          'success',
+          'Saved to Wishlist',
+          'Item added to your saved collection. Open Wishlist to view.'
+        );
+      } else {
+        showNotification(
+          'info',
+          'Removed from Wishlist',
+          'Item removed from your saved collection.'
+        );
+      }
+      return willAdd ? [...prev, productId] : prev.filter((id) => id !== productId);
+    });
   };
 
   const isInWishlist = (productId: string) => wishlist.includes(productId);
