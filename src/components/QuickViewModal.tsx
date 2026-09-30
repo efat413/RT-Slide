@@ -460,7 +460,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                   onClose();
                   setSelectedCategory(null);
                 }}
-                className="hover:text-rose-600 transition-colors"
+                className="underline decoration-slate-300 underline-offset-4 hover:decoration-rose-500 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:ring-offset-1 rounded-xs transition-colors font-medium"
               >
                 Home
               </a>
@@ -475,7 +475,7 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                       onClose();
                       setSelectedCategory(category.id);
                     }}
-                    className="hover:text-rose-600 transition-colors font-medium"
+                    className="underline decoration-slate-300 underline-offset-4 hover:decoration-rose-500 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:ring-offset-1 rounded-xs transition-colors font-medium"
                   >
                     {category.name}
                   </a>

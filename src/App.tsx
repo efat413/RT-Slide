@@ -378,7 +378,6 @@ const StoreContent: React.FC = () => {
           {!searchQuery && !selectedCategory && categories.length > 0 && (
             <div
               id="homepage-category-selector"
-              aria-label="Filter products by category"
               className="mt-4 sm:mt-5 mb-2 sm:mb-4 bg-white/80 backdrop-blur-xs p-2.5 sm:p-3 rounded-2xl border border-slate-200/90 shadow-2xs"
             >
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

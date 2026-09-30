@@ -360,7 +360,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
             e.preventDefault();
             handleBackToHome();
           }}
-          className="hover:text-rose-600 transition-colors font-medium"
+          className="underline decoration-slate-300 underline-offset-4 hover:decoration-rose-500 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:ring-offset-1 rounded-xs transition-colors font-medium"
         >
           Home
         </a>
@@ -376,7 +376,7 @@ export const ProductDetailView: React.FC<ProductDetailViewProps> = ({ productId 
                 setCurrentView('store');
                 window.history.pushState({}, '', getCategoryUrl(category.slug || category.id));
               }}
-              className="hover:text-rose-600 transition-colors font-medium"
+              className="underline decoration-slate-300 underline-offset-4 hover:decoration-rose-500 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:ring-offset-1 rounded-xs transition-colors font-medium"
             >
               {category.name}
             </a>

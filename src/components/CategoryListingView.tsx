@@ -92,7 +92,7 @@ export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
         <button
           type="button"
           onClick={onBackToHome}
-          className="hover:text-rose-600 transition-colors cursor-pointer font-medium flex items-center gap-1"
+          className="underline decoration-slate-300 underline-offset-4 hover:decoration-rose-500 hover:text-rose-600 focus:outline-none focus:ring-2 focus:ring-rose-500/40 focus:ring-offset-1 rounded-xs transition-colors cursor-pointer font-medium flex items-center gap-1"
         >
           <ArrowLeft className="w-3 h-3" />
           <span>Home</span>

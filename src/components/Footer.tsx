@@ -168,7 +168,10 @@ export const Footer: React.FC = () => {
                 {supportPhone && (
                   <div className="flex items-center gap-2">
                     <Phone className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <a href={`tel:${cleanPhone}`} className="hover:text-emerald-400 font-mono transition-colors">
+                    <a
+                      href={`tel:${cleanPhone}`}
+                      className="underline decoration-slate-600 underline-offset-4 hover:text-emerald-400 hover:decoration-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 rounded-xs font-mono transition-colors"
+                    >
                       {supportPhone}
                     </a>
                   </div>
@@ -176,7 +179,10 @@ export const Footer: React.FC = () => {
                 {supportEmail && (
                   <div className="flex items-center gap-2">
                     <Mail className="w-4 h-4 text-sky-400 shrink-0" />
-                    <a href={`mailto:${supportEmail}`} className="hover:text-sky-400 transition-colors">
+                    <a
+                      href={`mailto:${supportEmail}`}
+                      className="underline decoration-slate-600 underline-offset-4 hover:text-sky-400 hover:decoration-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/40 rounded-xs transition-colors"
+                    >
                       {supportEmail}
                     </a>
                   </div>

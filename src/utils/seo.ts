@@ -983,8 +983,8 @@ export function injectProductSEOIntoHtml(
   const productCrawlerHtml = `
   <main class="ssr-crawler-fallback" style="padding: 24px; max-width: 900px; margin: 0 auto; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <nav style="font-size: 14px; margin-bottom: 16px; color: #64748b;">
-      <a href="/" style="color: #e11d48; text-decoration: none;">Home</a> &gt;
-      ${categoryName ? `<span>${escapeHtmlAttr(categoryName)}</span> &gt; ` : ''}
+      <a href="/" style="color: #e11d48; text-decoration: underline; text-underline-offset: 3px;">Home</a> &gt;
+      ${categoryName && product.categoryId ? `<a href="/category/${escapeHtmlAttr(categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-'))}" style="color: #e11d48; text-decoration: underline; text-underline-offset: 3px;">${escapeHtmlAttr(categoryName)}</a> &gt; ` : categoryName ? `<span>${escapeHtmlAttr(categoryName)}</span> &gt; ` : ''}
       <span>${escapeHtmlAttr(product.title)}</span>
     </nav>
     <article>
@@ -1084,7 +1084,7 @@ export function injectCategorySEOIntoHtml(
   const categoryCrawlerHtml = `
   <main class="ssr-crawler-fallback" style="padding: 24px; max-width: 900px; margin: 0 auto; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
     <nav style="font-size: 14px; margin-bottom: 16px; color: #64748b;">
-      <a href="/" style="color: #e11d48; text-decoration: none;">Home</a> &gt;
+      <a href="/" style="color: #e11d48; text-decoration: underline; text-underline-offset: 3px;">Home</a> &gt;
       <span>${escapeHtmlAttr(category.name)}</span>
     </nav>
     <article>
@@ -1096,7 +1096,7 @@ export function injectCategorySEOIntoHtml(
   const categoryNoscriptHtml = `
   <noscript>
     <div style="padding: 24px; max-width: 900px; margin: 0 auto; font-family: sans-serif;">
-      <nav><a href="/">Home</a> &gt; ${escapeHtmlAttr(category.name)}</nav>
+      <nav><a href="/" style="color: #e11d48; text-decoration: underline; text-underline-offset: 3px;">Home</a> &gt; ${escapeHtmlAttr(category.name)}</nav>
       <h1>${escapeHtmlAttr(category.name)}</h1>
       <p>${escapeHtmlAttr(category.description || '')}</p>
     </div>
