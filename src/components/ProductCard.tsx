@@ -22,6 +22,9 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = 
     getProductUrl,
     getCategoryUrl,
     setSelectedCategory,
+    setCurrentView,
+    setSelectedProductId,
+    loadProductById,
   } = useStore();
   const [isAdded, setIsAdded] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -32,6 +35,28 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = 
     (product.sizes && product.sizes.length > 0) ||
     (product.colors && product.colors.length > 0)
   );
+
+  const handleProductClick = (e: React.MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    e.preventDefault();
+    setSelectedProductId(product.id);
+    setCurrentView('product');
+    loadProductById(product.id);
+    window.history.pushState({}, '', getProductUrl(product.id));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCategoryClick = (e: React.MouseEvent) => {
+    if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (category) {
+      setSelectedCategory(category.id);
+      setCurrentView('store');
+      window.history.pushState({}, '', getCategoryUrl(category.slug || category.id));
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -83,6 +108,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = 
       <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
         <a
           href={getProductUrl(product.id)}
+          onClick={handleProductClick}
           className="block w-full h-full cursor-pointer"
           title={product.title}
         >
@@ -207,14 +233,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = 
             {category ? (
               <a
                 href={getCategoryUrl(category.slug || category.id)}
-                onClick={(e) => {
-                  if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSelectedCategory(category.id);
-                  const el = document.getElementById('products-feed-section');
-                  if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }}
+                onClick={handleCategoryClick}
                 className="text-[10px] sm:text-[11px] font-semibold text-slate-500 hover:text-rose-600 transition-colors uppercase tracking-wider truncate max-w-[55%]"
                 title={`View ${category.name}`}
               >
@@ -237,6 +256,7 @@ const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = 
           {/* Title */}
           <a
             href={getProductUrl(product.id)}
+            onClick={handleProductClick}
             className="block group-hover:text-rose-600 transition-colors"
           >
             <h3 className="font-bold text-xs sm:text-sm text-slate-800 group-hover:text-rose-600 transition-colors mt-1 line-clamp-2 leading-tight sm:leading-snug min-h-[2rem] sm:min-h-0">
