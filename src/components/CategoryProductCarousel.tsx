@@ -10,7 +10,7 @@ interface CategoryProductCarouselProps {
   priorityFirst?: boolean;
 }
 
-export const CategoryProductCarousel: React.FC<CategoryProductCarouselProps> = ({
+const CategoryProductCarouselComponent: React.FC<CategoryProductCarouselProps> = ({
   category,
   products,
   onViewAll,
@@ -182,7 +182,7 @@ export const CategoryProductCarousel: React.FC<CategoryProductCarouselProps> = (
               key={`${category.id}-${product.id}-${idx}`}
               className="transition-all duration-300 transform"
             >
-              <ProductCard product={product} />
+              <ProductCard product={product} priority={priorityFirst && idx === 0} />
             </div>
           ))}
         </div>
@@ -209,3 +209,5 @@ export const CategoryProductCarousel: React.FC<CategoryProductCarouselProps> = (
     </section>
   );
 };
+
+export const CategoryProductCarousel = React.memo(CategoryProductCarouselComponent);

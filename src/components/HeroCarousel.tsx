@@ -147,19 +147,21 @@ export const HeroCarousel: React.FC = () => {
     >
       {/* Slide Container (Guaranteed 100% width and 100% height from parent fixed aspect ratio) */}
       <div className="relative w-full h-full overflow-hidden">
-        {/* Ambient Blurred Backdrop: Prevents any harsh letterbox while foreground preserves full aspect ratio */}
-        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-          <img
-            src={getResponsiveImageUrl(currentBannerUrl, 320, 50)}
-            alt=""
-            aria-hidden="true"
-            loading="lazy"
-            decoding="async"
-            width={320}
-            height={128}
-            className="w-full h-full object-cover blur-xl opacity-35 scale-110"
-          />
-        </div>
+        {/* Ambient Blurred Backdrop: Only rendered when fitMode is contain to prevent letterboxing, saving an extra image request when cover is active */}
+        {fitMode !== 'cover' && (
+          <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+            <img
+              src={getResponsiveImageUrl(currentBannerUrl, 320, 50)}
+              alt=""
+              aria-hidden="true"
+              loading="lazy"
+              decoding="async"
+              width={320}
+              height={128}
+              className="w-full h-full object-cover blur-xl opacity-35 scale-110"
+            />
+          </div>
+        )}
 
         {/* Authoritative Banner Image: Zero stretching, zero distortion, zero forced cropping (LCP prioritized) */}
         <div className="absolute inset-0 z-0 flex items-center justify-center">

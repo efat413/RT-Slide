@@ -7,9 +7,10 @@ import { getResponsiveImageProps } from '../utils/responsiveImage';
 
 interface ProductCardProps {
   product: Product;
+  priority?: boolean;
 }
 
-export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
+const ProductCardComponent: React.FC<ProductCardProps> = ({ product, priority = false }) => {
   const {
     addToCart,
     quickBuy,
@@ -23,6 +24,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     setSelectedCategory,
   } = useStore();
   const [isAdded, setIsAdded] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   const category = categories.find((c) => c.id === product.categoryId);
   const isSavedInWishlist = wishlist.includes(product.id);
@@ -66,11 +68,14 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
       ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
       : 0;
 
-  const primaryImgProps = getResponsiveImageProps(product.imageUrl, 'card');
-  const secondaryImgProps = secondaryImage ? getResponsiveImageProps(secondaryImage, 'card') : null;
+  const primaryImgProps = getResponsiveImageProps(product.imageUrl, 'card', { priority });
+  const secondaryImgProps = secondaryImage && isHovered ? getResponsiveImageProps(secondaryImage, 'card') : null;
 
   return (
-    <div className="group relative bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-1">
+    <div
+      onMouseEnter={() => setIsHovered(true)}
+      className="group relative bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-1"
+    >
       {/* Dynamic Rainbow Top Accent on hover */}
       <div className="h-1 w-full bg-transparent group-hover:rainbow-gradient-bg transition-all duration-300" />
 
@@ -89,8 +94,8 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
             }`}
           />
 
-          {/* Alternate angle reveal on hover if multiple images exist */}
-          {secondaryImage && secondaryImgProps && (
+          {/* Alternate angle reveal on hover if multiple images exist (deferred until user hovers card) */}
+          {secondaryImage && isHovered && secondaryImgProps && (
             <img
               {...secondaryImgProps}
               alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'} view 2`}
@@ -332,3 +337,5 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
     </div>
   );
 };
+
+export const ProductCard = React.memo(ProductCardComponent);

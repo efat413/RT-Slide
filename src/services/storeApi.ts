@@ -27,9 +27,10 @@ async function apiRequest<T>(url: string, options?: RequestInit, timeoutMs = 450
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const isMutation = options?.method && options.method.toUpperCase() !== 'GET' && options.method.toUpperCase() !== 'HEAD';
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      ...(isMutation ? { 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0' } : {}),
       ...(options?.headers as Record<string, string> || {}),
     };
 
