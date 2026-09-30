@@ -104,10 +104,11 @@ export async function verifyCourierWebhookAuth(
 
   // If no secrets are configured in environment or settings, reject all webhook requests securely
   if (candidateSecrets.size === 0) {
+    console.warn('[Webhook Auth]: No webhook secret is configured on the server.');
     return {
       authenticated: false,
       status: 401,
-      error: 'Courier webhook authentication failed: No webhook secret (COURIER_WEBHOOK_SECRET or STEADFAST_SECRET_KEY) is configured on the server.',
+      error: 'Unauthorized: Courier webhook authentication failed.',
     };
   }
 

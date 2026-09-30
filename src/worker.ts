@@ -62,7 +62,18 @@ export default {
 
     // 1. API router
     if (url.pathname.startsWith('/api/')) {
-      return handleApiRequest(request, env, ctx);
+      try {
+        return await handleApiRequest(request, env, ctx);
+      } catch (err: any) {
+        console.error('[Worker API Unhandled Error]:', err);
+        return new Response(JSON.stringify({ success: false, error: 'Internal server error.' }), {
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+          },
+        });
+      }
     }
 
     // 2. Technical SEO: robots.txt

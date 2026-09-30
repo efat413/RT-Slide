@@ -260,7 +260,7 @@ function jsonResponse(data: any, status = 200, customHeaders: Record<string, str
       console.error('[Server Internal Error Logged Safely]:', data.error);
       payload = {
         ...data,
-        error: 'An internal server error occurred. Please try again later.',
+        error: 'Internal server error.',
       };
     }
   }
@@ -555,8 +555,9 @@ async function requireAuth(
   try {
     secret = await resolveAuthSecret(env);
   } catch (err: any) {
+    console.error('Error resolving auth secret:', err);
     return {
-      errorResponse: jsonResponse({ success: false, error: err?.message || 'Authentication error.' }, 500),
+      errorResponse: jsonResponse({ success: false, error: 'Internal server error.' }, 500),
     };
   }
 
@@ -979,7 +980,7 @@ async function sendPasswordResetEmail(
       });
       return {
         success: false,
-        error: data?.message || `Email service rejected request (HTTP ${res.status}).`,
+        error: 'Failed to send password reset email.',
       };
     }
 
@@ -1197,7 +1198,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         }
       );
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Login failed' }, 500);
+      console.error('Login error:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -1852,8 +1854,9 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         }
       );
     } catch (err: any) {
+      console.error('Error loading homepage store data:', err);
       return jsonResponse(
-        { success: false, error: err?.message || 'Failed to load homepage store data' },
+        { success: false, error: 'Internal server error.' },
         500
       );
     }
@@ -1912,7 +1915,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin, Cookie, Authorization',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to fetch products' }, 500);
+        console.error('Error fetching products:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -1943,7 +1947,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           201
         );
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to create product' }, 500);
+        console.error('Error creating product:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -1982,7 +1987,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin, Cookie, Authorization',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching product by ID:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2013,7 +2019,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           product: sanitizeProductForRole(updated, { isSuperAdmin, canViewBuyingPrice, canViewProfit }),
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to update product' }, 500);
+        console.error('Error updating product:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Product not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2027,7 +2037,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         await deleteProductFromD1(env.DB, prodId);
         return jsonResponse({ success: true, message: `Product "${prodId}" deleted from D1.` });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to delete product' }, 500);
+        console.error('Error deleting product:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2044,7 +2055,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to fetch categories' }, 500);
+        console.error('Error fetching categories:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2060,7 +2072,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const created = await insertCategory(env.DB, catData);
         return jsonResponse({ success: true, category: created }, 201);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to create category' }, 500);
+        console.error('Error creating category:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2078,7 +2091,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching category by ID:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2094,7 +2108,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const updated = await updateCategoryInD1(env.DB, catId, updates);
         return jsonResponse({ success: true, category: updated });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to update category' }, 500);
+        console.error('Error updating category:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Category not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2108,7 +2126,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         await deleteCategoryFromD1(env.DB, catId);
         return jsonResponse({ success: true, message: `Category "${catId}" deleted from Cloudflare D1.` });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to delete category' }, 500);
+        console.error('Error deleting category:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2125,7 +2144,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to fetch sliders' }, 500);
+        console.error('Error fetching sliders:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2141,7 +2161,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const created = await insertSlider(env.DB, slideData);
         return jsonResponse({ success: true, slider: created }, 201);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to create slider' }, 500);
+        console.error('Error creating slider:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2160,7 +2181,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching slider by ID:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2176,7 +2198,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const updated = await updateSliderInD1(env.DB, slideId, updates);
         return jsonResponse({ success: true, slider: updated });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error updating slider:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Slider not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2190,7 +2216,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         await deleteSliderFromD1(env.DB, slideId);
         return jsonResponse({ success: true, message: `Slider deleted from D1.` });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error deleting slider:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2219,7 +2246,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin, Cookie, Authorization',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to fetch settings from Cloudflare D1' }, 500);
+        console.error('Error fetching settings:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2262,7 +2290,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         });
       } catch (err: any) {
         console.error('Failed to update store settings in D1:', err);
-        return jsonResponse({ success: false, error: err?.message || 'Failed to persist settings in Cloudflare D1 database.' }, 500);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2420,7 +2448,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       });
     } catch (err: any) {
       console.error('Failed to process upload:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to upload media asset' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -2596,7 +2624,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const returnList = hasCouponView ? coupons : coupons.filter((c) => c.isActive);
         return jsonResponse({ success: true, coupons: returnList });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching coupons:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2612,7 +2641,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const created = await insertCoupon(env.DB, couponData);
         return jsonResponse({ success: true, coupon: created }, 201);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error creating coupon:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2633,7 +2663,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const updated = await updateCouponInD1(env.DB, code, updates);
         return jsonResponse({ success: true, coupon: updated });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error updating coupon:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Coupon not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2647,7 +2681,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         await deleteCouponFromD1(env.DB, code);
         return jsonResponse({ success: true, message: `Coupon deleted from D1.` });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error deleting coupon:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2665,7 +2700,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           'Vary': 'Origin',
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching reviews:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2791,7 +2827,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         });
         return jsonResponse({ success: true, review: created }, 201);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error creating review:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -2809,7 +2846,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       await deleteReviewFromD1(env.DB, revId);
       return jsonResponse({ success: true, message: `Review deleted from D1.` });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message }, 500);
+      console.error('Error deleting review:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -2850,7 +2888,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
 
         return jsonResponse({ success: true, count: nonSuperAdminUsers.length, users: nonSuperAdminUsers });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error fetching users:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -2875,7 +2914,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         const created = await insertUser(env.DB, userData);
         return jsonResponse({ success: true, user: created }, 201);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error creating user:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -3039,7 +3079,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
 
         return jsonResponse({ success: true, user: updated }, 200, responseHeaders);
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error updating user:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'User not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -3079,7 +3123,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         await deleteUserFromD1(env.DB, usrId);
         return jsonResponse({ success: true, message: `User deleted from D1.` });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message }, 500);
+        console.error('Error deleting user:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -3153,8 +3198,9 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         message: `Password for ${targetUser.email} has been reset successfully.`,
       });
     } catch (err: any) {
+      console.error('Error resetting user password:', err);
       return jsonResponse(
-        { success: false, error: err?.message || 'Failed to reset password.' },
+        { success: false, error: 'Internal server error.' },
         500
       );
     }
@@ -3212,7 +3258,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       });
     } catch (err: any) {
       console.error('Error fetching orders from D1:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to fetch orders from D1' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -3431,7 +3477,25 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       );
     } catch (err: any) {
       console.error('Error saving order to D1:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to persist order to Cloudflare D1' }, 500);
+      const errMsg = err?.message || '';
+      const isClientValidationError = [
+        'required',
+        'Bangladeshi contact phone number',
+        'restricted for this contact number',
+        'Daily order limit',
+        'at least one item',
+        'missing a valid product ID',
+        'Invalid item quantity',
+        'Insufficient stock',
+        'sold out during checkout',
+        'does not exist',
+        'already exists',
+      ].some((pattern) => errMsg.includes(pattern));
+
+      if (isClientValidationError) {
+        return jsonResponse({ success: false, error: errMsg }, 400);
+      }
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -3593,7 +3657,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           order: sanitizeOrderForPublicTracking(order!),
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to process tracking request' }, 500);
+        console.error('Error processing tracking request:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -3640,7 +3705,11 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           order: sanitizeOrderForRole(updated, { isSuperAdmin, canViewBuyingPrice, canViewProfit }),
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to update order in D1' }, 500);
+        console.error('Error updating order in D1:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Order not found' }, 404);
+        }
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
 
@@ -3657,7 +3726,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           message: `Order #${orderId} permanently removed from Cloudflare D1.`,
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to delete order from D1' }, 500);
+        console.error('Error deleting order from D1:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -3704,9 +3774,10 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         data: sfData,
       }, 400);
     } catch (err: any) {
+      console.error('Failed to communicate with Steadfast API:', err);
       return jsonResponse({
         success: false,
-        error: err?.message || 'Failed to communicate with Steadfast API',
+        error: 'Internal server error.',
       }, 500);
     }
   }
@@ -4097,7 +4168,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         ...result,
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Sync failed.' }, 500);
+      console.error('Courier sync failed:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4134,7 +4206,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         order: sanitizeOrderForRole(result.order!, { isSuperAdmin, canViewBuyingPrice, canViewProfit }),
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Failed to sync order.' }, 500);
+      console.error('Failed to sync order:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4309,7 +4382,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           shippingStatus: normalized.shippingStatus,
         });
       } catch (err: any) {
-        return jsonResponse({ success: false, error: err?.message || 'Failed to process courier webhook' }, 500);
+        console.error('Failed to process courier webhook:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }
   }
@@ -4333,7 +4407,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         webhooks: maskCourierWebhooks(rawWebhooks),
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Failed to load courier webhooks' }, 500);
+      console.error('Failed to load courier webhooks:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4355,7 +4430,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         message: 'Courier webhooks saved successfully.',
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Failed to save courier webhooks' }, 500);
+      console.error('Failed to save courier webhooks:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4383,7 +4459,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         message: 'Courier webhook deleted successfully.',
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Failed to delete courier webhook' }, 500);
+      console.error('Failed to delete courier webhook:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4686,7 +4763,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         results,
       });
     } catch (err: any) {
-      return jsonResponse({ success: false, error: err?.message || 'Failed to trigger webhooks' }, 500);
+      console.error('Failed to trigger webhooks:', err);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4708,7 +4786,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       return jsonResponse({ success: true, summary });
     } catch (err: any) {
       console.error('Error fetching profit analytics:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to aggregate profit analytics' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4727,7 +4805,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       return jsonResponse({ success: true, count: expenses.length, expenses });
     } catch (err: any) {
       console.error('Error fetching expenses:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to fetch expenses' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4753,7 +4831,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       return jsonResponse({ success: true, expense: created, message: 'Expense recorded successfully.' }, 201);
     } catch (err: any) {
       console.error('Error creating expense:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to save expense' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 
@@ -4770,7 +4848,7 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
       return jsonResponse({ success: true, message: `Expense "${expId}" deleted.` });
     } catch (err: any) {
       console.error('Error deleting expense:', err);
-      return jsonResponse({ success: false, error: err?.message || 'Failed to delete expense' }, 500);
+      return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
     }
   }
 

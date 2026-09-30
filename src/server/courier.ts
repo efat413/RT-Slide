@@ -225,7 +225,8 @@ export async function callSteadfastApi(
         error: clientMsg,
       };
     } catch (err: any) {
-      lastError = err?.message || 'Network connection failed';
+      console.error('Steadfast gateway attempt error:', err);
+      lastError = 'Network connection failed';
       continue;
     }
   }
@@ -404,7 +405,8 @@ export async function syncAllActiveCourierOrders(
         errors.push(`Order #${row.order_number}: ${res.error}`);
       }
     } catch (err: any) {
-      errors.push(`Order #${row.order_number}: ${err?.message || 'Sync error'}`);
+      console.error(`Error syncing courier for order #${row.order_number}:`, err);
+      errors.push(`Order #${row.order_number}: Sync error`);
     }
   }
 

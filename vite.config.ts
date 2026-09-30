@@ -2899,8 +2899,9 @@ function localApiDevPlugin(): Plugin {
                 format: validation.format,
               }));
             } catch (err: any) {
+              console.error('Upload error:', err);
               res.statusCode = 500;
-              return res.end(JSON.stringify({ success: false, error: err?.message || 'Upload failed' }));
+              return res.end(JSON.stringify({ success: false, error: 'Internal server error.' }));
             }
           });
         }
@@ -3006,8 +3007,9 @@ function localApiDevPlugin(): Plugin {
                   data: sfData,
                 }));
               } catch (e: any) {
+                console.error('Steadfast test error:', e);
                 res.statusCode = 500;
-                return res.end(JSON.stringify({ success: false, error: e?.message || 'Failed to contact Steadfast API' }));
+                return res.end(JSON.stringify({ success: false, error: 'Internal server error.' }));
               }
             }
 
@@ -3161,8 +3163,9 @@ function localApiDevPlugin(): Plugin {
                   data: sfData,
                 }));
               } catch (e: any) {
+                console.error('Courier proxy request error:', e);
                 res.statusCode = 500;
-                return res.end(JSON.stringify({ success: false, error: e?.message || 'Courier proxy request failed' }));
+                return res.end(JSON.stringify({ success: false, error: 'Internal server error.' }));
               }
             }
 
@@ -3301,8 +3304,9 @@ function localApiDevPlugin(): Plugin {
             res.statusCode = 400;
             return res.end(JSON.stringify({ success: false, error: sfResult.error || 'Failed to query Steadfast API' }));
           } catch (e: any) {
+            console.error('Steadfast status error:', e);
             res.statusCode = 500;
-            return res.end(JSON.stringify({ success: false, error: e?.message || 'Failed to query Steadfast API' }));
+            return res.end(JSON.stringify({ success: false, error: 'Internal server error.' }));
           }
         }
 

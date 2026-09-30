@@ -628,7 +628,7 @@ export async function updateProductInD1(
 ): Promise<Product> {
   const existing = await getProductById(db, id);
   if (!existing) {
-    throw new Error(`Product with ID "${id}" does not exist in D1 database.`);
+    throw new Error('Product not found.');
   }
 
   const title = updates.title !== undefined ? updates.title.trim() : existing.title;
@@ -710,7 +710,8 @@ export async function deleteProductFromD1(db: D1Database, id: string): Promise<b
   ]);
   const deleteRes = batchRes[1];
   if (!deleteRes.success) {
-    throw new Error(deleteRes.error || `Failed to delete product "${id}" from Cloudflare D1 database.`);
+    console.error('Failed to delete product from database:', deleteRes.error);
+    throw new Error('Failed to delete product.');
   }
   return true;
 }
@@ -769,7 +770,7 @@ export async function insertCategory(db: D1Database, input: any): Promise<Catego
 
 export async function updateCategoryInD1(db: D1Database, id: string, updates: Partial<Category>): Promise<Category> {
   const existing = await getCategoryById(db, id);
-  if (!existing) throw new Error(`Category with ID "${id}" not found`);
+  if (!existing) throw new Error('Category not found.');
 
   const name = updates.name !== undefined ? updates.name.trim() : existing.name;
   const slug = updates.slug !== undefined ? updates.slug.trim() : existing.slug;
@@ -797,7 +798,8 @@ export async function updateCategoryInD1(db: D1Database, id: string, updates: Pa
 export async function deleteCategoryFromD1(db: D1Database, idOrSlug: string): Promise<boolean> {
   const res = await db.prepare('DELETE FROM categories WHERE id = ? OR slug = ?').bind(idOrSlug, idOrSlug).run();
   if (!res.success) {
-    throw new Error(`Failed to delete category "${idOrSlug}" from Cloudflare D1 database.`);
+    console.error('Failed to delete category from database:', res.error);
+    throw new Error('Failed to delete category.');
   }
   return true;
 }
@@ -874,7 +876,7 @@ export async function insertSlider(db: D1Database, input: any): Promise<Carousel
 
 export async function updateSliderInD1(db: D1Database, id: string, updates: Partial<CarouselSlide>): Promise<CarouselSlide> {
   const existing = await db.prepare('SELECT * FROM sliders WHERE id = ?').bind(id).first<SliderRow>();
-  if (!existing) throw new Error(`Slider with ID "${id}" not found`);
+  if (!existing) throw new Error('Slider not found.');
 
   const current = rowToSlider(existing);
   const title = updates.title ?? current.title;
@@ -1091,7 +1093,8 @@ export async function updateStoreSettingsInD1(db: D1Database, updates: Partial<S
       .bind(settingsJson)
       .run();
     if (res.success === false) {
-      throw new Error('Cloudflare D1 failed to execute UPDATE query on store_settings table.');
+      console.error('Failed to execute UPDATE on store_settings table:', res.error);
+      throw new Error('Failed to update store settings.');
     }
   } else {
     const res = await db
@@ -1099,7 +1102,8 @@ export async function updateStoreSettingsInD1(db: D1Database, updates: Partial<S
       .bind(settingsJson)
       .run();
     if (res.success === false) {
-      throw new Error('Cloudflare D1 failed to execute INSERT query on store_settings table.');
+      console.error('Failed to execute INSERT on store_settings table:', res.error);
+      throw new Error('Failed to save store settings.');
     }
   }
 
@@ -1109,7 +1113,8 @@ export async function updateStoreSettingsInD1(db: D1Database, updates: Partial<S
     .first<StoreSettingsRow>();
 
   if (!verifiedRow || !verifiedRow.settings_json) {
-    throw new Error('Verification failed: store_settings row not found in Cloudflare D1 after write.');
+    console.error('Verification failed: store_settings row not found in database after write.');
+    throw new Error('Failed to verify store settings after save.');
   }
 
   // 5. Parse and return the canonical D1 record
@@ -1204,7 +1209,7 @@ export async function insertCoupon(db: D1Database, coupon: Coupon): Promise<Coup
 
 export async function updateCouponInD1(db: D1Database, code: string, updates: Partial<Coupon>): Promise<Coupon> {
   const existing = await db.prepare('SELECT * FROM coupons WHERE code = ?').bind(code).first<CouponRow>();
-  if (!existing) throw new Error(`Coupon with code "${code}" not found`);
+  if (!existing) throw new Error('Coupon not found.');
 
   const current = rowToCoupon(existing);
   const discountType = updates.discountType ?? current.discountType;
@@ -1392,7 +1397,7 @@ export async function insertUser(db: D1Database, input: any): Promise<UserAccoun
 
 export async function updateUserInD1(db: D1Database, id: string, updates: Partial<UserAccount> & { password?: string }): Promise<UserAccount> {
   const existing = await db.prepare('SELECT * FROM users WHERE id = ?').bind(id).first<UserRow>();
-  if (!existing) throw new Error(`User with ID "${id}" not found`);
+  if (!existing) throw new Error('User not found.');
 
   const current = rowToUser(existing);
   const name = updates.name !== undefined ? updates.name.trim() : current.name;
@@ -2020,12 +2025,12 @@ export async function insertOrder(db: D1Database, order: Order): Promise<Order> 
 
     const d1Product = await getProductById(db, prodId);
     if (!d1Product) {
-      throw new Error(`Product "${it?.product?.title || prodId}" (ID: ${prodId}) does not exist in Cloudflare D1 database.`);
+      throw new Error(`Product "${it?.product?.title || prodId}" does not exist.`);
     }
 
     if (d1Product.stock < requestedQty) {
       throw new Error(
-        `Insufficient stock for "${d1Product.title}". Requested: ${requestedQty}, Available in D1: ${d1Product.stock}`
+        `Insufficient stock for "${d1Product.title}". Requested: ${requestedQty}, Available: ${d1Product.stock}`
       );
     }
 
@@ -2188,7 +2193,8 @@ export async function insertOrder(db: D1Database, order: Order): Promise<Order> 
         if (errorText.includes('INSUFFICIENT_STOCK')) {
           throw new Error('One or more items in your cart sold out during checkout. Please refresh your cart.');
         }
-        throw new Error(errorText || 'Cloudflare D1 batch transaction failed during order placement and stock deduction.');
+        console.error('Database transaction error during order placement batch:', errorText);
+        throw new Error('Database transaction failed during order placement.');
       }
 
       // Verify that every stock update statement actually affected exactly 1 row (stock >= qty)
@@ -2360,7 +2366,8 @@ export async function updateOrderInD1(
         const batchResults = await db.batch(restoreStmts);
         const failed = batchResults.find((r) => !r.success);
         if (failed) {
-          throw new Error(failed.error || 'Failed to restore product stock on order cancellation in D1');
+          console.error('Failed to restore product stock on order cancellation:', failed.error);
+          throw new Error('Failed to restore product stock on order cancellation.');
         }
       }
     }
@@ -2380,7 +2387,8 @@ export async function updateOrderInD1(
         const batchResults = await db.batch(deductStmts);
         const failed = batchResults.find((r) => !r.success);
         if (failed) {
-          throw new Error(failed.error || 'Failed to re-deduct product stock in D1');
+          console.error('Failed to re-deduct product stock in database:', failed.error);
+          throw new Error('Failed to re-deduct product stock.');
         }
       }
     }
@@ -2413,7 +2421,8 @@ export async function deleteOrderFromD1(db: D1Database, id: string): Promise<boo
   }
   const res = await db.prepare('DELETE FROM orders WHERE id = ? OR order_number = ?').bind(id, id).run();
   if (!res.success) {
-    throw new Error(`Failed to delete order "${id}" from Cloudflare D1 database.`);
+    console.error('Failed to delete order from database:', res.error);
+    throw new Error('Failed to delete order.');
   }
   return true;
 }
@@ -2486,7 +2495,8 @@ export async function insertExpense(
 export async function deleteExpenseFromD1(db: D1Database, id: string): Promise<boolean> {
   const res = await db.prepare('DELETE FROM expenses WHERE id = ?').bind(id).run();
   if (!res.success) {
-    throw new Error(`Failed to delete expense "${id}" from Cloudflare D1 database.`);
+    console.error('Failed to delete expense from database:', res.error);
+    throw new Error('Failed to delete expense.');
   }
   return true;
 }
