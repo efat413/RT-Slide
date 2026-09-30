@@ -88,7 +88,7 @@ async function runVerification() {
   );
 
   // 1.3 Canonical URL
-  const expectedProductCanonical = `${SITE_DOMAIN}/?product=${encodeURIComponent(sampleProduct.id)}`;
+  const expectedProductCanonical = `${SITE_DOMAIN}/product/${encodeURIComponent(sampleProduct.id)}`;
   assert(
     productHtml.includes(`<link rel="canonical" href="${expectedProductCanonical}" />`),
     '1.3 Product has exact canonical URL in initial HTML response'
@@ -316,7 +316,8 @@ async function runVerification() {
   assert(
     sitemap.includes('<loc>https://rongdhonutrade.com/</loc>') &&
     sitemap.includes('https://rongdhonutrade.com/?category=') &&
-    sitemap.includes('https://rongdhonutrade.com/?product=') &&
+    sitemap.includes('https://rongdhonutrade.com/product/') &&
+    !sitemap.includes('?product=') &&
     !sitemap.includes('/admin') &&
     !sitemap.includes('/checkout'),
     '4.2 sitemap.xml includes valid public URLs and excludes private routes'

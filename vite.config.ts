@@ -678,6 +678,13 @@ function localApiDevPlugin(): Plugin {
                 generate404Html('Product Not Found', `The product "${prodParam}" was not found or has been removed.`)
               );
             }
+
+            // Graceful migration from old ?product= URL to canonical /product/:id (301 Permanent Redirect)
+            if (url.searchParams.has('product') || url.searchParams.has('p')) {
+              res.statusCode = 301;
+              res.setHeader('Location', `/product/${encodeURIComponent(foundProduct.id)}`);
+              return res.end();
+            }
           }
         }
 

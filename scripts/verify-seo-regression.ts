@@ -36,7 +36,8 @@ async function runRegressionSuite() {
   assert(sitemapXml.startsWith('<?xml version="1.0" encoding="UTF-8"?>'), 'TEST 14.1: sitemap starts with XML declaration');
   assert(sitemapXml.includes('<loc>https://rongdhonutrade.com/</loc>'), 'TEST 14.2: sitemap includes homepage canonical URL');
   assert(sitemapXml.includes('https://rongdhonutrade.com/?category=mens-accessories'), 'TEST 14.3: sitemap includes category canonical URLs');
-  assert(sitemapXml.includes('https://rongdhonutrade.com/?product=prod-wallet-01'), 'TEST 14.4: sitemap includes product canonical URLs');
+  assert(sitemapXml.includes('https://rongdhonutrade.com/product/prod-wallet-01'), 'TEST 14.4: sitemap includes product canonical URLs');
+  assert(!sitemapXml.includes('?product='), 'TEST 14.4b: sitemap does not include old ?product= query URLs');
   assert(!sitemapXml.includes('/admin'), 'TEST 14.5: sitemap excludes /admin');
   assert(!sitemapXml.includes('/checkout'), 'TEST 14.6: sitemap excludes /checkout');
   assert(!sitemapXml.includes('/account'), 'TEST 14.7: sitemap excludes /account');
@@ -57,7 +58,7 @@ async function runRegressionSuite() {
   const prodMeta = getProductSEOMetadata(sampleProd, 'Rongdhonu Trade');
   assert(prodMeta.title.includes(sampleProd.title) && prodMeta.title.includes('Rongdhonu Trade'), 'TEST 16.1: Product has unique branded title');
   assert(prodMeta.description.includes(sampleProd.title) && prodMeta.description.includes(sampleProd.price.toLocaleString()), 'TEST 16.2: Product description includes price and features');
-  assert(prodMeta.canonicalUrl === `https://rongdhonutrade.com/?product=${encodeURIComponent(sampleProd.id)}`, 'TEST 16.3: Canonical URL matches product ID');
+  assert(prodMeta.canonicalUrl === `https://rongdhonutrade.com/product/${encodeURIComponent(sampleProd.id)}`, 'TEST 16.3: Canonical URL matches product ID');
 
   const prodSchema = generateProductSchema(sampleProd, 'Men\'s Accessories', 'Rongdhonu Trade');
   assert(prodSchema['@type'] === 'Product', 'TEST 16.4: Product Schema is type Product');

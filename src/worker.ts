@@ -169,6 +169,12 @@ export default {
           );
         }
 
+        // Graceful migration from old ?product= query URLs to canonical /product/:id route (301 Permanent Redirect)
+        if (url.searchParams.has('product') || url.searchParams.has('p')) {
+          const canonicalUrl = new URL(`/product/${encodeURIComponent(product.id)}`, request.url);
+          return Response.redirect(canonicalUrl.toString(), 301);
+        }
+
         // Product is valid: Generate Server-Side Rendered SEO HTML response with HTTP 200
         let categoryName: string | undefined = undefined;
         if (product.categoryId) {
