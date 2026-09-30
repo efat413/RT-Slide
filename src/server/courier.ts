@@ -214,9 +214,12 @@ export async function callSteadfastApi(
         };
       }
 
-      const clientMsg =
+      const rawMsg =
         parsed?.message ||
-        (parsed?.errors ? JSON.stringify(parsed.errors) : `Steadfast returned HTTP ${res.status}`);
+        (parsed?.errors ? (typeof parsed.errors === 'string' ? parsed.errors : JSON.stringify(parsed.errors)) : `Steadfast returned HTTP ${res.status}`);
+      const clientMsg = typeof rawMsg === 'string' && rawMsg.length < 300 && !/secret|key|token|password/i.test(rawMsg)
+        ? rawMsg
+        : `Steadfast returned HTTP ${res.status}`;
 
       return {
         ok: false,
@@ -288,7 +291,10 @@ export async function querySteadfastStatus(
     };
   }
 
-  const errorMsg = sfData?.message || (sfData?.errors ? JSON.stringify(sfData.errors) : 'No status returned from Steadfast.');
+  const rawErr = sfData?.message || (sfData?.errors ? (typeof sfData.errors === 'string' ? sfData.errors : JSON.stringify(sfData.errors)) : 'No status returned from Steadfast.');
+  const errorMsg = typeof rawErr === 'string' && rawErr.length < 300 && !/secret|key|token|password/i.test(rawErr)
+    ? rawErr
+    : 'No status returned from Steadfast.';
   return { success: false, error: String(errorMsg), rawData: sfData };
 }
 

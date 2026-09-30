@@ -210,6 +210,14 @@ async function runTests() {
     'Identity lookup query matches exclusively on unique email or primary key ID'
   );
 
+  // 12. Verify jsonResponse hides internal errors and strips stack traces and SQL queries
+  assert(
+    routerCode.includes("error: 'Internal server error.'") &&
+    routerCode.includes("delete payload.stack") &&
+    routerCode.includes("delete payload.sql"),
+    'jsonResponse automatically masks 5xx errors and strips stack traces and SQL queries'
+  );
+
   // =================================================================
   // LIVE HTTP API INTEGRATION TESTS (against dev server)
   // =================================================================

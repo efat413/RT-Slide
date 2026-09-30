@@ -254,14 +254,46 @@ function buildAuthCookieHeader(request: Request, token: string, maxAgeSeconds: n
  */
 function jsonResponse(data: any, status = 200, customHeaders: Record<string, string> = {}): Response {
   let payload = data;
-  if (status >= 500 && data && typeof data === 'object') {
-    // Hide internal server errors: Never expose raw err.message or database internals to clients
-    if (data.error && typeof data.error === 'string') {
-      console.error('[Server Internal Error Logged Safely]:', data.error);
-      payload = {
-        ...data,
-        error: 'Internal server error.',
-      };
+
+  if (payload && typeof payload === 'object') {
+    // 1. Strip raw stack traces, SQL queries, and file paths unconditionally
+    if ('stack' in payload) {
+      console.error('[Server Technical Stack Logged Safely]:', payload.stack);
+      delete payload.stack;
+    }
+    if ('sql' in payload) {
+      console.error('[Server SQL Query Logged Safely]:', payload.sql);
+      delete payload.sql;
+    }
+
+    // 2. Hide internal server errors (5xx): Never expose raw err.message or database internals to clients
+    if (status >= 500) {
+      if (payload.error && payload.error !== 'Internal server error.') {
+        console.error('[Server Internal Error Logged Safely]:', payload.error);
+        payload = {
+          ...payload,
+          error: 'Internal server error.',
+        };
+      }
+      if (payload.message && typeof payload.message === 'string' && !payload.success) {
+        console.error('[Server Internal Message Logged Safely]:', payload.message);
+        payload = {
+          ...payload,
+          message: 'Internal server error.',
+        };
+      }
+    } else {
+      // 3. Defense-in-depth for 4xx responses: Intercept any accidental SQL, D1 driver, or filesystem leaks
+      const errStr = typeof payload.error === 'string' ? payload.error : '';
+      const isLeakingInternals =
+        /sqlite|syntax error|d1_error|table |column |foreign key|prepare|bind|database disk|file not found|\/app\/|\/src\/|\.ts:\d+|\.js:\d+/i.test(errStr);
+      if (isLeakingInternals) {
+        console.error('[Server Internal Leak Intercepted & Masked Safely]:', errStr);
+        payload = {
+          ...payload,
+          error: 'Invalid request.',
+        };
+      }
     }
   }
 
@@ -3494,7 +3526,8 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         'already exists',
       ].some((pattern) => errMsg.includes(pattern));
 
-      if (isClientValidationError) {
+      const hasSqlOrDbLeak = /sqlite|syntax error|d1_error|table |column |foreign key|prepare|bind|database/i.test(errMsg);
+      if (isClientValidationError && !hasSqlOrDbLeak) {
         return jsonResponse({ success: false, error: errMsg }, 400);
       }
       return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
@@ -3770,10 +3803,13 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         });
       }
 
+      const rawError = callResult.error || sfData.message || 'Failed to connect to Steadfast Courier API';
+      const cleanError = typeof rawError === 'string' && rawError.length < 300 && !/secret|key|token|stack|\.ts/i.test(rawError)
+        ? rawError
+        : 'Failed to connect to Steadfast Courier API';
       return jsonResponse({
         success: false,
-        error: callResult.error || sfData.message || 'Failed to connect to Steadfast Courier API',
-        data: sfData,
+        error: cleanError,
       }, 400);
     } catch (err: any) {
       console.error('Failed to communicate with Steadfast API:', err);
@@ -3927,7 +3963,10 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
           });
         }
 
-        const errorDetail = sfResult.error || sfData.message || (sfData.errors ? JSON.stringify(sfData.errors) : 'Steadfast dispatch failed. Please check order details.');
+        const rawDetail = sfResult.error || sfData.message || (sfData.errors ? (typeof sfData.errors === 'string' ? sfData.errors : JSON.stringify(sfData.errors)) : 'Steadfast dispatch failed. Please check order details.');
+        const errorDetail = typeof rawDetail === 'string' && rawDetail.length < 300 && !/sqlite|token|secret|stack|\.ts/i.test(rawDetail)
+          ? rawDetail
+          : 'Steadfast dispatch failed. Please check order details.';
         return jsonResponse({
           success: false,
           error: errorDetail,
