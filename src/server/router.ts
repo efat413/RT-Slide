@@ -8,6 +8,7 @@ import {
   getProductById,
   insertProduct,
   updateProductInD1,
+  setProductFeaturedInD1,
   deleteProductFromD1,
   // Categories
   getAllCategories,
@@ -1985,6 +1986,43 @@ export async function handleApiRequest(request: Request, env: Env, ctx?: any): P
         );
       } catch (err: any) {
         console.error('Error creating product:', err);
+        return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
+      }
+    }
+  }
+
+  const featuredProductMatch = path.match(/^\/api\/products\/([^/]+)\/featured$/);
+  if (featuredProductMatch) {
+    const prodId = decodeURIComponent(featuredProductMatch[1]);
+    if (method === 'PUT' || method === 'PATCH') {
+      const { auth, errorResponse } = await requireAuth(request, env);
+      if (errorResponse) return errorResponse;
+      const permErr = requirePermission(auth!, 'product.update');
+      if (permErr) return permErr;
+
+      try {
+        const body = (await request.json()) as any;
+        const isFeatured = body.isFeatured !== undefined
+          ? Boolean(body.isFeatured)
+          : Boolean(body.featured);
+        const featuredSortOrder = body.featuredSortOrder !== undefined
+          ? Number(body.featuredSortOrder)
+          : (body.sortOrder !== undefined ? Number(body.sortOrder) : undefined);
+
+        const updated = await setProductFeaturedInD1(env.DB, prodId, isFeatured, featuredSortOrder);
+        const isSuperAdmin = auth!.role === 'super_admin';
+        const canViewBuyingPrice = hasPermission(auth!, 'product.view_buying_price');
+        const canViewProfit = hasPermission(auth!, 'product.view_profit');
+
+        return jsonResponse({
+          success: true,
+          product: sanitizeProductForRole(updated, { isSuperAdmin, canViewBuyingPrice, canViewProfit }),
+        });
+      } catch (err: any) {
+        console.error('Error updating product featured status:', err);
+        if (err?.message?.includes('not found')) {
+          return jsonResponse({ success: false, error: 'Product not found' }, 404);
+        }
         return jsonResponse({ success: false, error: 'Internal server error.' }, 500);
       }
     }

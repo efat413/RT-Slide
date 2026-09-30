@@ -123,6 +123,7 @@ export interface ProductRow {
   images_json: string;
   stock: number;
   featured: number;
+  featured_sort_order?: number | null;
   rating: number;
   reviews_count: number;
   specs_json: string | null;

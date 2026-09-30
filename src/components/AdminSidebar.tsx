@@ -25,6 +25,7 @@ interface AdminSidebarProps {
   setIsMobileNavOpen: (open: boolean) => void;
   ordersCount: number;
   productsCount: number;
+  featuredProductsCount?: number;
   categoriesCount: number;
   slidesCount: number;
   couriersCount: number;
@@ -53,6 +54,7 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
   setIsMobileNavOpen,
   ordersCount,
   productsCount,
+  featuredProductsCount = 0,
   categoriesCount,
   slidesCount,
   couriersCount,
@@ -290,6 +292,38 @@ export const AdminSidebar: React.FC<AdminSidebarProps> = ({
 
               {isActive && item.id === 'products' && (
                 <div className="pl-9 pr-2 py-1 space-y-1 text-[11px] animate-in slide-in-from-top-1 duration-150">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProductStockFilter('all');
+                      setIsMobileNavOpen(false);
+                    }}
+                    className={`w-full text-left px-2 py-1 rounded-md transition-colors cursor-pointer ${
+                      productStockFilter !== 'featured' && productStockFilter !== 'low'
+                        ? 'text-amber-400 font-bold bg-slate-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    • All Products ({productsCount})
+                  </button>
+                  <button
+                    type="button"
+                    id="admin-sidebar-featured-products-btn"
+                    onClick={() => {
+                      setProductStockFilter('featured');
+                      setIsMobileNavOpen(false);
+                    }}
+                    className={`w-full text-left px-2 py-1 rounded-md transition-colors cursor-pointer flex items-center justify-between ${
+                      productStockFilter === 'featured'
+                        ? 'text-rose-400 font-bold bg-slate-800'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    <span>⭐ Featured Products</span>
+                    <span className="text-[10px] bg-rose-500/20 text-rose-300 px-1.5 py-0.2 rounded-full font-bold">
+                      {featuredProductsCount}
+                    </span>
+                  </button>
                   {hasPermission('product.create') && (
                     <button
                       type="button"

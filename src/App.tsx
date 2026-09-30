@@ -13,6 +13,7 @@ import { UserAccountModal } from './components/UserAccountModal';
 import { ToastNotification } from './components/ToastNotification';
 import { Footer } from './components/Footer';
 import { CategoryProductCarousel } from './components/CategoryProductCarousel';
+import { FeaturedProductsCarousel } from './components/FeaturedProductsCarousel';
 import { CategoryListingView } from './components/CategoryListingView';
 import { ProductDetailView } from './components/ProductDetailView';
 
@@ -110,6 +111,7 @@ const StoreContent: React.FC = () => {
     isCategoryLoading,
     categorySortBy,
     setCategorySortBy,
+    featuredProducts,
   } = useStore();
 
   const [invalidNotice, setInvalidNotice] = useState<string | null>(null);
@@ -471,6 +473,7 @@ const StoreContent: React.FC = () => {
                 totalPages={categoryTotalPages}
                 limit={24}
                 sortBy={categorySortBy}
+                isFeaturedListing={selectedCategory === 'featured'}
                 onPageChange={(page) => setCategoryPage(page)}
                 onSortChange={(sort) => setCategorySortBy(sort)}
                 onCategoryChange={(catId) => setSelectedCategory(catId)}
@@ -489,6 +492,18 @@ const StoreContent: React.FC = () => {
           ) : (
             /* Homepage: Lightweight category sections with recycling carousels */
             <section id="products-feed-section" className="pt-2 pb-12">
+              {/* Featured Products Carousel - Bounded to 6-8 items, lazy loaded, deterministic sort */}
+              {homeCategoryFilter === 'all' && featuredProducts && featuredProducts.length > 0 && (
+                <FeaturedProductsCarousel
+                  products={featuredProducts}
+                  onViewAll={() => {
+                    setSelectedCategory('featured');
+                    window.history.pushState({}, '', '/featured');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                />
+              )}
+
               <div className="space-y-2 sm:space-y-4">
                 {(homeCategoryFilter === 'all'
                   ? categories

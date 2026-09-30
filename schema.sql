@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS products (
   images_json TEXT NOT NULL DEFAULT '[]',
   stock INTEGER NOT NULL DEFAULT 0,
   featured INTEGER NOT NULL DEFAULT 0,
+  featured_sort_order INTEGER DEFAULT 0,
   rating REAL DEFAULT 5.0,
   reviews_count INTEGER DEFAULT 0,
   specs_json TEXT DEFAULT '[]',
@@ -35,6 +36,7 @@ CREATE INDEX IF NOT EXISTS idx_products_featured ON products(featured);
 CREATE INDEX IF NOT EXISTS idx_products_created_at ON products(created_at);
 CREATE INDEX IF NOT EXISTS idx_products_category_created_at ON products(category_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_products_featured_created_at ON products(featured, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_products_featured_sort_order ON products(featured, featured_sort_order ASC, created_at DESC);
 
 -- 2. CATEGORIES TABLE
 CREATE TABLE IF NOT EXISTS categories (

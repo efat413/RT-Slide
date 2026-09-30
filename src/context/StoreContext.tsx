@@ -154,6 +154,12 @@ interface StoreContextType {
   openProductVideo: (prod: Product, mode?: 'popup' | 'floating') => void;
 
   // Homepage Limited Category Data & Category Server-Side Pagination
+  featuredProducts: Product[];
+  toggleProductFeatured: (
+    productId: string,
+    isFeatured?: boolean,
+    sortOrder?: number
+  ) => Promise<{ success: boolean; error?: string }>;
   homepageCategoryProducts: Record<string, Product[]>;
   categoryListingProducts: Product[];
   categoryPage: number;
@@ -535,6 +541,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // 3b. Limited Homepage Products by Category (recycled in memory, strictly capped at 6 items/category, NO continuous API requests)
   const [homepageCategoryProducts, setHomepageCategoryProducts] = useState<Record<string, Product[]>>({});
+  const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
 
   // 3c. Server-Side Paginated Category Listing & Search State (24 items/page)
   const [categoryPage, setCategoryPage] = useState<number>(1);
@@ -1054,6 +1061,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Check if an invalid product deep link is present in URL
     const urlParams = new URLSearchParams(window.location.search);
     const productParam = urlParams.get('product') || urlParams.get('p');
+    const categoryParam = urlParams.get('category') || urlParams.get('c');
     if (productParam && products.length > 0) {
       const exists = products.some(
         (p) => p.id === productParam || p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === productParam
@@ -1099,9 +1107,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
     }
 
+    // Check if viewing Featured products collection (/featured or ?category=featured or ?featured=true)
+    if (
+      (typeof window !== 'undefined' && window.location.pathname === '/featured') ||
+      urlParams.get('featured') === 'true' ||
+      selectedCategory === 'featured' ||
+      categoryParam?.toLowerCase() === 'featured'
+    ) {
+      applyClientSEO(
+        {
+          title: `Featured Products | ${settings.siteName || DEFAULT_SITE_NAME}`,
+          description: `Browse our curated collection of featured top-selling and trending products at ${settings.siteName || DEFAULT_SITE_NAME}. Nationwide Cash on Delivery across Bangladesh.`,
+          canonicalUrl: `${SITE_DOMAIN}/featured`,
+          breadcrumbs: [
+            { name: 'Home', url: `${SITE_DOMAIN}/` },
+            { name: 'Featured Products', url: `${SITE_DOMAIN}/featured` },
+          ],
+        },
+        settings
+      );
+      return;
+    }
+
     // Check if an invalid category deep link is present in URL
-    const categoryParam = urlParams.get('category') || urlParams.get('cat');
-    if (categoryParam && categories.length > 0) {
+    if (categoryParam && categoryParam.toLowerCase() !== 'featured' && categories.length > 0) {
       const catExists = categories.some(
         (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
       );
@@ -1207,6 +1236,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           if (hpData.categoryProducts) {
             setHomepageCategoryProducts(hpData.categoryProducts);
           }
+          if (Array.isArray(hpData.featuredProducts)) {
+            setFeaturedProducts(hpData.featuredProducts);
+          }
           const loadedProducts = hpData.products || [];
           setProducts(loadedProducts);
           setQuickViewProduct((prev) => (prev ? loadedProducts.find((p) => p.id === prev.id) || prev : null));
@@ -1251,6 +1283,12 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             );
             setHomepageCategoryProducts(catMap);
             setProducts(loadedProducts);
+            try {
+              const featProds = await productsApi.getAll({ featured: true, limit: 8 });
+              setFeaturedProducts(featProds);
+            } catch {
+              setFeaturedProducts([]);
+            }
             setIsStoreError(false);
           } catch {
             setIsStoreError(true);
@@ -1424,10 +1462,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     let isCancelled = false;
     setIsCategoryLoading(true);
 
+    const isFeaturedCategory = selectedCategory === 'featured';
+
     productsApi
       .getPaginated({
-        category: selectedCategory || undefined,
+        category: isFeaturedCategory ? undefined : (selectedCategory || undefined),
         search: searchQuery.trim() || undefined,
+        featured: isFeaturedCategory ? true : undefined,
         page: categoryPage,
         limit: 24,
         sortBy: categorySortBy,
@@ -2854,6 +2895,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setProducts((prev) =>
         prev.map((prod) => (prod.id === id ? canonical : prod))
       );
+      setFeaturedProducts((prev) =>
+        canonical.featured
+          ? prev.some((p) => p.id === id)
+            ? prev.map((p) => (p.id === id ? canonical : p))
+            : [...prev, canonical]
+          : prev.filter((p) => p.id !== id)
+      );
       setQuickViewProduct((prev) => (prev && prev.id === id ? canonical : prev));
       setVideoModalProduct((prev) => {
         if (!prev || prev.id !== id) return prev;
@@ -2888,6 +2936,76 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   };
 
+  const toggleProductFeatured = async (
+    productId: string,
+    isFeatured?: boolean,
+    sortOrder?: number
+  ): Promise<{ success: boolean; error?: string }> => {
+    const target = products.find((p) => p.id === productId);
+    const newFeatured = isFeatured !== undefined ? isFeatured : !(target?.featured);
+    try {
+      const canonical = await productsApi.setFeatured(productId, newFeatured, sortOrder);
+
+      // 1. Update master products in state
+      setProducts((prev) =>
+        prev.map((prod) => (prod.id === productId ? canonical : prod))
+      );
+
+      // 2. Update featuredProducts list
+      setFeaturedProducts((prev) => {
+        if (newFeatured) {
+          const idx = prev.findIndex((p) => p.id === productId);
+          if (idx >= 0) {
+            const next = [...prev];
+            next[idx] = canonical;
+            return next;
+          }
+          return [...prev, canonical];
+        } else {
+          return prev.filter((p) => p.id !== productId);
+        }
+      });
+
+      // 3. Update homepageCategoryProducts without changing product's original category!
+      setHomepageCategoryProducts((prev) => {
+        let changed = false;
+        const next: Record<string, Product[]> = {};
+        for (const [catId, prods] of Object.entries(prev)) {
+          if (!Array.isArray(prods)) continue;
+          next[catId] = prods.map((p) => {
+            if (p.id === productId) {
+              changed = true;
+              return canonical;
+            }
+            return p;
+          });
+        }
+        return changed ? next : prev;
+      });
+
+      // 4. Update categoryListingProducts if displayed
+      setCategoryListingProducts((prev) =>
+        prev.map((p) => (p.id === productId ? canonical : p))
+      );
+
+      // 5. Update modals if open
+      setQuickViewProduct((prev) => (prev?.id === productId ? canonical : prev));
+      setSingleProduct((prev) => (prev?.id === productId ? canonical : prev));
+
+      showNotification(
+        'success',
+        newFeatured ? 'Added to Featured' : 'Removed from Featured',
+        `"${canonical.title}" is ${newFeatured ? 'now featured on the homepage' : 'no longer featured on the homepage'}.`
+      );
+      return { success: true };
+    } catch (err: any) {
+      const errorMsg = err?.message || 'Failed to update featured status in D1';
+      console.error('toggleProductFeatured error:', err);
+      showNotification('error', 'Featured Update Failed', errorMsg, 5000);
+      return { success: false, error: errorMsg };
+    }
+  };
+
   const deleteProduct = async (id: string): Promise<{ success: boolean; error?: string }> => {
     try {
       // 1. Call D1 API (DELETE /api/products/:id)
@@ -2895,6 +3013,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // 2. Only update React state after D1 confirms success
       setProducts((prev) => prev.filter((prod) => prod.id !== id));
+      setFeaturedProducts((prev) => prev.filter((prod) => prod.id !== id));
       setCart((prev) => prev.filter((item) => item.product.id !== id));
       showNotification('info', 'Product Deleted', 'Product removed from D1 catalog.');
       return { success: true };
@@ -4222,6 +4341,8 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         addExpense,
         deleteExpense,
         homepageCategoryProducts,
+        featuredProducts,
+        toggleProductFeatured,
         categoryListingProducts,
         categoryPage,
         setCategoryPage,

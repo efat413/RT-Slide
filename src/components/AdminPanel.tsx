@@ -105,6 +105,7 @@ import { ConfirmModal } from './ConfirmModal';
 import { FormattedDescription } from './FormattedDescription';
 import { ImageUploadField } from './ImageUploadField';
 import { AdminSidebar } from './AdminSidebar';
+import { FeaturedProductsManagement } from './Admin/FeaturedProductsManagement';
 
 // Code-splitting: Lazy-load large admin-only feature tabs and modals
 const PermissionManagementModal = React.lazy(() =>
@@ -209,6 +210,8 @@ export const AdminPanel: React.FC = () => {
     orderTotalPages,
     orderSummary,
     setOrderQueryFilters,
+    featuredProducts,
+    toggleProductFeatured,
   } = useStore();
 
   // Authentication states (start empty for security, no auto-fill)
@@ -457,6 +460,7 @@ export const AdminPanel: React.FC = () => {
   // 2. Products CRUD filters
   const [productStockFilter, setProductStockFilter] = useState<'all' | 'in_stock' | 'low_stock' | 'out_of_stock' | 'featured'>('all');
   const [productCategoryFilter, setProductCategoryFilter] = useState<string>('all');
+  const [productsSubView, setProductsSubView] = useState<'all' | 'featured'>('all');
 
   // 3. Categories filters
   const [categoryFilter, setCategoryFilter] = useState<'all' | 'with_products' | 'empty'>('all');
@@ -2394,6 +2398,7 @@ export const AdminPanel: React.FC = () => {
           setIsMobileNavOpen={setIsMobileNavOpen}
           ordersCount={totalOrdersCount}
           productsCount={products.length}
+          featuredProductsCount={featuredProductsCount}
           categoriesCount={categories.length}
           slidesCount={slides.length}
           couriersCount={courierConfigs.length}
@@ -3859,6 +3864,56 @@ export const AdminPanel: React.FC = () => {
               </div>
             </div>
 
+            {/* Sub-navigation Tabs: All Products vs Featured Products */}
+            <div className="flex items-center gap-2 border-b border-slate-200 pb-3">
+              <button
+                type="button"
+                id="subtab-all-products"
+                onClick={() => {
+                  setProductsSubView('all');
+                  if (productStockFilter === 'featured') setProductStockFilter('all');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  productsSubView === 'all' && productStockFilter !== 'featured'
+                    ? 'bg-slate-900 text-white shadow-sm'
+                    : 'bg-white hover:bg-slate-100 text-slate-700 border border-slate-200'
+                }`}
+              >
+                <Package className="w-4 h-4" />
+                <span>All Products ({products.length})</span>
+              </button>
+
+              <button
+                type="button"
+                id="subtab-featured-products"
+                onClick={() => {
+                  setProductsSubView('featured');
+                  setProductStockFilter('featured');
+                }}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+                  productsSubView === 'featured' || productStockFilter === 'featured'
+                    ? 'bg-gradient-to-r from-rose-600 to-rose-700 text-white shadow-sm'
+                    : 'bg-white hover:bg-rose-50 text-rose-700 border border-rose-200'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>Featured Products ({featuredProductsCount})</span>
+              </button>
+            </div>
+
+            {(productsSubView === 'featured' || productStockFilter === 'featured') ? (
+              <FeaturedProductsManagement
+                products={products}
+                categories={categories}
+                featuredProducts={featuredProducts}
+                onToggleFeatured={toggleProductFeatured}
+                hasPermission={hasPermission}
+                isSuperAdmin={isSuperAdmin}
+                onOpenEditModal={openEditProductModal}
+              />
+            ) : (
+              <>
+
             {/* Low Stock Alert & Quick Restock Banner */}
             {products.some((p) => p.stock <= 5) && (
               <div className="p-4 bg-amber-50 border border-amber-300 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
@@ -4323,14 +4378,30 @@ export const AdminPanel: React.FC = () => {
                       {(hasPermission('product.update') || hasPermission('product.delete')) && (
                         <div className="p-3 border-t border-slate-100 flex items-center gap-2 bg-white">
                           {hasPermission('product.update') && (
-                            <button
-                              id={`edit-product-${product.id}`}
-                              onClick={() => openEditProductModal(product)}
-                              className="flex-1 py-1.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 hover:bg-slate-100 transition-colors shadow-xs"
-                            >
-                              <Edit2 className="w-3.5 h-3.5 text-blue-600" />
-                              Edit Details
-                            </button>
+                            <>
+                              <button
+                                id={`edit-product-${product.id}`}
+                                onClick={() => openEditProductModal(product)}
+                                className="flex-1 py-1.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-bold text-xs flex items-center justify-center gap-1 hover:bg-slate-100 transition-colors shadow-xs"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Edit Details</span>
+                              </button>
+                              <button
+                                id={`toggle-featured-card-${product.id}`}
+                                type="button"
+                                onClick={() => toggleProductFeatured(product.id, !product.featured)}
+                                className={`py-1.5 px-2.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1 transition-colors cursor-pointer border ${
+                                  product.featured
+                                    ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
+                                    : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                                }`}
+                                title={product.featured ? 'Remove from Featured' : 'Add to Featured'}
+                              >
+                                <Sparkles className={`w-3.5 h-3.5 ${product.featured ? 'text-rose-500 fill-rose-500' : 'text-slate-400'}`} />
+                                <span className="hidden sm:inline">{product.featured ? 'Featured' : 'Feature'}</span>
+                              </button>
+                            </>
                           )}
                           {hasPermission('product.delete') && (
                             <button
@@ -4370,6 +4441,8 @@ export const AdminPanel: React.FC = () => {
                   );
                 })}
             </div>
+            )}
+            </>
             )}
           </div>
           )

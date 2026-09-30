@@ -1571,8 +1571,17 @@ function localApiDevPlugin(): Plugin {
             catProds.forEach((p: any) => collectedMap.set(p.id, p));
           });
 
-          const featuredProducts = devProducts
-            .filter((p: any) => p.status !== 'inactive' && !p.isDeleted && (p.featured || p.isFeatured))
+          const rawFeatured = devProducts
+            .filter((p: any) => p.status !== 'inactive' && !p.isDeleted && (p.featured || p.isFeatured));
+          rawFeatured.sort((a: any, b: any) => {
+            const orderA = Number(a.featuredSortOrder) || 0;
+            const orderB = Number(b.featuredSortOrder) || 0;
+            if (orderA > 0 && orderB > 0) return orderA - orderB;
+            if (orderA > 0) return -1;
+            if (orderB > 0) return 1;
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+          });
+          const featuredProducts = rawFeatured
             .slice(0, 8)
             .map((p: any) => sanitizeDevProduct(p, false));
 
@@ -1708,6 +1717,45 @@ function localApiDevPlugin(): Plugin {
               return res.end(JSON.stringify({
                 success: true,
                 product: sanitizeDevProduct(newProd, { isSuperAdmin: isSuper, canViewBuyingPrice, canViewProfit }),
+              }));
+            });
+          }
+        }
+
+        const featMatch = url.pathname.match(/^\/api\/products\/([^/]+)\/featured$/);
+        if (featMatch) {
+          const id = decodeURIComponent(featMatch[1]);
+          const authResult = requireDevAuth(req);
+          if (method === 'PUT' || method === 'PATCH') {
+            const permErr = requireDevPermission(authResult, 'product.update');
+            if (permErr) return sendDevError(res, permErr);
+
+            return readBody((body) => {
+              const idx = devProducts.findIndex((p) => p.id === id);
+              if (idx === -1) {
+                res.statusCode = 404;
+                return res.end(JSON.stringify({ success: false, error: 'Product not found' }));
+              }
+              const isFeat = body.isFeatured !== undefined ? Boolean(body.isFeatured) : Boolean(body.featured);
+              const sortOrd = body.featuredSortOrder !== undefined
+                ? Number(body.featuredSortOrder)
+                : (body.sortOrder !== undefined ? Number(body.sortOrder) : (devProducts[idx].featuredSortOrder || 0));
+
+              devProducts[idx] = {
+                ...devProducts[idx],
+                featured: isFeat,
+                featuredSortOrder: sortOrd,
+                updatedAt: new Date().toISOString(),
+              };
+
+              const isSuperRole = authResult.auth!.role === 'super_admin';
+              const canViewBuying = isSuperRole || hasDevPermission(authResult.auth!, 'product.view_buying_price');
+              const canViewProf = isSuperRole || hasDevPermission(authResult.auth!, 'product.view_profit');
+
+              res.statusCode = 200;
+              return res.end(JSON.stringify({
+                success: true,
+                product: sanitizeDevProduct(devProducts[idx], { isSuperAdmin: isSuperRole, canViewBuyingPrice: canViewBuying, canViewProfit: canViewProf }),
               }));
             });
           }

@@ -29,6 +29,7 @@ interface CategoryListingViewProps {
   onBackToHome: () => void;
   onShareCategory?: (categoryId: string) => void;
   siteName?: string;
+  isFeaturedListing?: boolean;
 }
 
 export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
@@ -48,6 +49,7 @@ export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
   onBackToHome,
   onShareCategory,
   siteName = 'Rongdhonu Trade',
+  isFeaturedListing = false,
 }) => {
   const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -99,7 +101,13 @@ export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
         </button>
         <span className="text-slate-300">/</span>
         <span className="text-slate-900 font-bold" aria-current="page">
-          {searchQuery ? `Search: "${searchQuery}"` : category ? category.name : 'All Products'}
+          {searchQuery
+            ? `Search: "${searchQuery}"`
+            : isFeaturedListing
+            ? 'Featured Products'
+            : category
+            ? category.name
+            : 'All Products'}
         </span>
       </nav>
 
@@ -110,6 +118,8 @@ export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
             <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-slate-900 tracking-tight">
               {searchQuery
                 ? `Search: "${searchQuery}"`
+                : isFeaturedListing
+                ? 'Featured Products'
                 : category
                 ? category.name
                 : 'All Products'}
@@ -130,7 +140,11 @@ export const CategoryListingView: React.FC<CategoryListingViewProps> = ({
             )}
           </div>
 
-          {category?.description ? (
+          {isFeaturedListing ? (
+            <p className="text-xs sm:text-sm text-slate-600 mt-1.5 max-w-2xl leading-relaxed">
+              Explore our curated collection of featured top-selling and trending products across Bangladesh with nationwide cash on delivery.
+            </p>
+          ) : category?.description ? (
             <p className="text-xs sm:text-sm text-slate-600 mt-1.5 max-w-2xl leading-relaxed">
               {category.description}
             </p>

@@ -310,6 +310,7 @@ export function rowToProduct(row: ProductRow): Product {
     images: images.length > 0 ? images : [row.image_url],
     stock: Number(row.stock) || 0,
     featured: Boolean(row.featured),
+    featuredSortOrder: row.featured_sort_order != null ? Number(row.featured_sort_order) : 0,
     rating: Number(row.rating) || 5.0,
     reviewsCount: Number(row.reviews_count) || 0,
     specs,
@@ -460,7 +461,7 @@ export async function getHomepageProducts(
     SELECT * FROM products 
     WHERE (status = 'active' OR status = 'published' OR status IS NULL OR status = '')
       AND (featured = 1 OR featured = 'true')
-    ORDER BY created_at DESC 
+    ORDER BY CASE WHEN featured_sort_order IS NOT NULL AND featured_sort_order > 0 THEN featured_sort_order ELSE 99999 END ASC, created_at DESC 
     LIMIT ?
   `;
   statements.push(db.prepare(featuredSql).bind(featuredLimit));
@@ -478,9 +479,28 @@ export async function getHomepageProducts(
   }
 
   // Execute in 1 single D1 batch round trip (or concurrent fallback)
-  const batchResults = typeof db.batch === 'function'
-    ? await db.batch<ProductRow>(statements)
-    : await Promise.all(statements.map((s) => s.all<ProductRow>()));
+  let batchResults: any[];
+  try {
+    batchResults = typeof db.batch === 'function'
+      ? await db.batch<ProductRow>(statements)
+      : await Promise.all(statements.map((s) => s.all<ProductRow>()));
+  } catch (err: any) {
+    if (err?.message?.includes('featured_sort_order') || err?.message?.includes('no such column')) {
+      const fallbackFeaturedSql = `
+        SELECT * FROM products 
+        WHERE (status = 'active' OR status = 'published' OR status IS NULL OR status = '')
+          AND (featured = 1 OR featured = 'true')
+        ORDER BY created_at DESC 
+        LIMIT ?
+      `;
+      statements[0] = db.prepare(fallbackFeaturedSql).bind(featuredLimit);
+      batchResults = typeof db.batch === 'function'
+        ? await db.batch<ProductRow>(statements)
+        : await Promise.all(statements.map((s) => s.all<ProductRow>()));
+    } else {
+      throw err;
+    }
+  }
 
   // Process featured products
   const featuredRows = batchResults[0]?.results || [];
@@ -649,53 +669,164 @@ export async function updateProductInD1(
   const sku = updates.sku !== undefined ? updates.sku : (existing.sku || null);
   const videoUrl = updates.videoUrl !== undefined ? (updates.videoUrl || null) : (existing.videoUrl || null);
   const status = updates.status !== undefined ? updates.status : (existing.status || 'active');
+  const featuredSortOrder = updates.featuredSortOrder !== undefined
+    ? Math.max(0, Number(updates.featuredSortOrder))
+    : (existing.featuredSortOrder ?? 0);
 
-  await db
-    .prepare(`
-      UPDATE products SET
-        title = ?,
-        price = ?,
-        original_price = ?,
-        buying_price = ?,
-        category_id = ?,
-        description = ?,
-        image_url = ?,
-        images_json = ?,
-        stock = ?,
-        featured = ?,
-        rating = ?,
-        reviews_count = ?,
-        specs_json = ?,
-        sizes_json = ?,
-        colors_json = ?,
-        sku = ?,
-        video_url = ?,
-        status = ?,
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `)
-    .bind(
-      title,
-      price,
-      originalPrice,
-      buyingPrice,
-      categoryId,
-      description,
-      imageUrl,
-      JSON.stringify(images),
-      stock,
-      featured,
-      rating,
-      reviewsCount,
-      JSON.stringify(specs),
-      JSON.stringify(sizes),
-      JSON.stringify(colors),
-      sku,
-      videoUrl,
-      status,
-      id
-    )
-    .run();
+  try {
+    await db
+      .prepare(`
+        UPDATE products SET
+          title = ?,
+          price = ?,
+          original_price = ?,
+          buying_price = ?,
+          category_id = ?,
+          description = ?,
+          image_url = ?,
+          images_json = ?,
+          stock = ?,
+          featured = ?,
+          featured_sort_order = ?,
+          rating = ?,
+          reviews_count = ?,
+          specs_json = ?,
+          sizes_json = ?,
+          colors_json = ?,
+          sku = ?,
+          video_url = ?,
+          status = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `)
+      .bind(
+        title,
+        price,
+        originalPrice,
+        buyingPrice,
+        categoryId,
+        description,
+        imageUrl,
+        JSON.stringify(images),
+        stock,
+        featured,
+        featuredSortOrder,
+        rating,
+        reviewsCount,
+        JSON.stringify(specs),
+        JSON.stringify(sizes),
+        JSON.stringify(colors),
+        sku,
+        videoUrl,
+        status,
+        id
+      )
+      .run();
+  } catch (err: any) {
+    if (err?.message?.includes('featured_sort_order') || err?.message?.includes('no such column')) {
+      await db
+        .prepare(`
+          UPDATE products SET
+            title = ?,
+            price = ?,
+            original_price = ?,
+            buying_price = ?,
+            category_id = ?,
+            description = ?,
+            image_url = ?,
+            images_json = ?,
+            stock = ?,
+            featured = ?,
+            rating = ?,
+            reviews_count = ?,
+            specs_json = ?,
+            sizes_json = ?,
+            colors_json = ?,
+            sku = ?,
+            video_url = ?,
+            status = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `)
+        .bind(
+          title,
+          price,
+          originalPrice,
+          buyingPrice,
+          categoryId,
+          description,
+          imageUrl,
+          JSON.stringify(images),
+          stock,
+          featured,
+          rating,
+          reviewsCount,
+          JSON.stringify(specs),
+          JSON.stringify(sizes),
+          JSON.stringify(colors),
+          sku,
+          videoUrl,
+          status,
+          id
+        )
+        .run();
+    } else {
+      throw err;
+    }
+  }
+
+  const updated = await getProductById(db, id);
+  if (!updated) throw new Error('Failed to retrieve updated product');
+  return updated;
+}
+
+/**
+ * Sets product featured status and optional deterministic display order in Cloudflare D1.
+ * Authoritative, minimal update that strictly preserves the original category and all other attributes.
+ */
+export async function setProductFeaturedInD1(
+  db: D1Database,
+  id: string,
+  isFeatured: boolean,
+  featuredSortOrder?: number
+): Promise<Product> {
+  const existing = await getProductById(db, id);
+  if (!existing) {
+    throw new Error('Product not found.');
+  }
+
+  const sortOrder = featuredSortOrder !== undefined
+    ? Math.max(0, Number(featuredSortOrder))
+    : (existing.featuredSortOrder ?? 0);
+
+  const featuredVal = isFeatured ? 1 : 0;
+
+  try {
+    await db
+      .prepare(`
+        UPDATE products SET
+          featured = ?,
+          featured_sort_order = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `)
+      .bind(featuredVal, sortOrder, id)
+      .run();
+  } catch (err: any) {
+    if (err?.message?.includes('featured_sort_order') || err?.message?.includes('no such column')) {
+      await db
+        .prepare(`
+          UPDATE products SET
+            featured = ?,
+            updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `)
+        .bind(featuredVal, id)
+        .run();
+    } else {
+      throw err;
+    }
+  }
 
   const updated = await getProductById(db, id);
   if (!updated) throw new Error('Failed to retrieve updated product');

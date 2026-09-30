@@ -252,6 +252,20 @@ export const productsApi = {
     return res.data.product;
   },
 
+  async setFeatured(id: string, isFeatured: boolean, featuredSortOrder?: number): Promise<Product> {
+    const res = await apiRequest<{ success: boolean; product: Product }>(
+      `${API_BASE}/products/${encodeURIComponent(id)}/featured`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ isFeatured, featuredSortOrder }),
+      }
+    );
+    if (!res.success || !res.data?.product) {
+      throw new Error(res.error || 'Failed to update featured status in D1');
+    }
+    return res.data.product;
+  },
+
   async delete(id: string): Promise<boolean> {
     const res = await apiRequest<{ success: boolean }>(`${API_BASE}/products/${encodeURIComponent(id)}`, {
       method: 'DELETE',
