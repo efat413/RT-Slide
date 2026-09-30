@@ -1356,9 +1356,13 @@ export async function getUserByEmail(db: D1Database, email: string): Promise<Use
 }
 
 export async function getUserByEmailOrUsername(db: D1Database, identifier: string): Promise<UserRow | null> {
-  const clean = identifier.toLowerCase().trim();
-  const query = 'SELECT * FROM users WHERE LOWER(TRIM(email)) = ? OR LOWER(TRIM(name)) = ? OR id = ? LIMIT 1';
-  return db.prepare(query).bind(clean, clean, identifier).first<UserRow>();
+  const trimmed = (identifier || '').trim();
+  if (!trimmed) return null;
+  const cleanEmail = trimmed.toLowerCase();
+  // Identity Lookup Hardening: Match exclusively on unique identifiers (email or user ID).
+  // Non-unique display names ('name' column) are strictly excluded to prevent account selection ambiguity.
+  const query = 'SELECT * FROM users WHERE LOWER(TRIM(email)) = ? OR id = ? LIMIT 1';
+  return db.prepare(query).bind(cleanEmail, trimmed).first<UserRow>();
 }
 
 export async function insertUser(db: D1Database, input: any): Promise<UserAccount> {

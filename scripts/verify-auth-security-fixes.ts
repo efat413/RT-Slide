@@ -200,6 +200,16 @@ async function runTests() {
     'Strict 32-character SHA-256 signature length check is enforced in router.ts'
   );
 
+  // 11. Verify getUserByEmailOrUsername matches strictly on unique email or id, excluding non-unique name
+  assert(
+    !dbCode.includes('LOWER(TRIM(name)) = ?'),
+    'Identity lookup query strictly excludes non-unique display name (LOWER(TRIM(name)))'
+  );
+  assert(
+    dbCode.includes('SELECT * FROM users WHERE LOWER(TRIM(email)) = ? OR id = ? LIMIT 1'),
+    'Identity lookup query matches exclusively on unique email or primary key ID'
+  );
+
   // =================================================================
   // LIVE HTTP API INTEGRATION TESTS (against dev server)
   // =================================================================
@@ -408,6 +418,39 @@ async function runTests() {
   assert(
     legacyBody.error?.includes('Session invalidated or password was changed'),
     'Rejection message clearly instructs that session is invalidated and requires re-login'
+  );
+
+  // 12. Verify identity lookup correctness: Display name cannot be used as an ambiguous login credential
+  const nameLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      usernameOrEmail: 'Security Test User', // Display name, NOT unique email or ID
+      password: newPass,
+    }),
+  });
+  assert(
+    nameLoginRes.status === 401,
+    'Login attempt using non-unique display name is rejected with 401 Unauthorized'
+  );
+  const nameLoginData = await nameLoginRes.json();
+  assert(
+    nameLoginData.error === 'Invalid email or password.' || nameLoginData.error?.includes('Invalid email'),
+    'Safe generic error returned for invalid login identifier without account enumeration'
+  );
+
+  // 13. Verify unique email login continues to SUCCEED
+  const emailLoginRes = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      usernameOrEmail: testEmail, // Distinct unique email
+      password: newPass,
+    }),
+  });
+  assert(
+    emailLoginRes.status === 200,
+    'Login using unique verified email succeeds with 200'
   );
 
   console.log('\n================================================================');

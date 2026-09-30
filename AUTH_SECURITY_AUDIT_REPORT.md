@@ -17,7 +17,7 @@
 | 3 | Session-invalidation signature (`pwdSig`) had only 8 bits of entropy | **Low-Medium** | **FIXED** | None. Upgraded to 128-bit SHA-256 password hash digest (`computePasswordSignature`). |
 | 4 | Timing side-channel on `/api/auth/forgot-password` allowed account enumeration | **Medium** | **FIXED** | None. Dummy D1 queries, subtle crypto hashing, background email dispatch via `ctx.waitUntil`, and target delay equalization. |
 | 5 | Internal API exceptions and stack traces exposed to clients | **Medium** | **FIXED** | None. `jsonResponse` automatically intercepts status ≥ 500 errors, logs internally, and serves sanitized generic messages. |
-| 6 | Identity lookup in `getUserByEmailOrUsername` matches on non-unique `name` column | **Low (Informational)** | **OPEN** | Low / Data-hygiene. Passwords still strictly verified, but identifier ambiguity exists if duplicate display names exist. |
+| 6 | Identity lookup in `getUserByEmailOrUsername` matches on non-unique `name` column | **Low (Informational)** | **FIXED** | None. Query hardened to match exclusively on unique `email` or primary key `id`. Non-unique display names strictly excluded. |
 
 ---
 
@@ -155,18 +155,24 @@
 ---
 
 ### 6. Identity Lookup Matches on Non-Unique `name` Column
-- **Status:** **OPEN (Informational / Low Severity)**
-- **Original Issue:** In `schema.sql`, the `users.name` column does not have a `UNIQUE` constraint. In `src/server/db.ts`, `getUserByEmailOrUsername` queries:
+- **Status:** **FIXED**
+- **Original Issue:** In `schema.sql`, the `users.name` column does not have a `UNIQUE` constraint. In `src/server/db.ts`, `getUserByEmailOrUsername` previously queried:
   ```sql
   SELECT * FROM users WHERE LOWER(TRIM(email)) = ? OR LOWER(TRIM(name)) = ? OR id = ? LIMIT 1
   ```
-- **Current State:**
-  - This function is called during login when a user supplies an identifier.
-  - Because `name` is not unique, if multiple accounts share the same display name, `LIMIT 1` deterministically selects the earliest created row matching that display name.
-  - This is **not a credential bypass**, as `verifyPassword()` still verifies the submitted password against that specific user row's PBKDF2 hash.
-- **Evidence / File Location:** `src/server/db.ts`, lines 1358–1362; `src/server/router.ts`, lines 1141–1149.
-- **Remaining Risk:** Low. If users share identical display names and attempt login via display name rather than email, login attempts for newer colliding accounts will fail because their password will be checked against the first account's hash.
-- **Recommended Next Action:** Restrict login identifiers exclusively to verified unique email addresses or add a dedicated unique `username` column in the database schema.
+  If multiple accounts shared the same display name, `LIMIT 1` selected the earliest created row matching that display name, creating account selection ambiguity if someone attempted login using a non-email display name.
+- **Current Implementation:**
+  - `getUserByEmailOrUsername` in `src/server/db.ts` was hardened to query strictly and exclusively by unique database fields (`email` and `id`):
+    ```sql
+    SELECT * FROM users WHERE LOWER(TRIM(email)) = ? OR id = ? LIMIT 1
+    ```
+  - Display names (`name` column) are strictly excluded from authentication identity lookups.
+  - Development server authentication in `vite.config.ts` was synchronized to eliminate display name resolution.
+  - Password verification via constant-time PBKDF2 comparison still occurs immediately following identity resolution; non-existent accounts trigger dummy PBKDF2 verification (`DUMMY_HASH`) to prevent timing enumeration.
+  - Failed logins return a safe generic message (`'Invalid email or password.'`).
+- **Evidence / File Location:** `src/server/db.ts`, lines 1358–1366; `src/server/router.ts`, lines 1140–1188; `vite.config.ts`, lines 895–905.
+- **Remaining Risk:** None. Ambiguity is eliminated because `email` is enforced `UNIQUE` and `id` is `PRIMARY KEY`. Existing users log in seamlessly using their registered email address or user ID.
+- **Recommended Next Action:** Maintain coverage in `scripts/verify-auth-security-fixes.ts`.
 
 ---
 
@@ -188,12 +194,13 @@ The following architectural security controls were re-verified and remain robust
 ### Confirmed Fixed Issues
 - [x] **Finding 1:** Courier webhook secrets leaking over unauthenticated `GET /api/courier/webhooks` (**FIXED** — authentication enforced, permissions checked, secrets masked).
 - [x] **Finding 2:** Account modification via `PUT /api/users/:id` without current password (**FIXED** — `currentPassword` required and verified).
-- [x] **Finding 3:** Insufficient entropy in session invalidation `pwdSig` (**FIXED** — 128-bit SHA-256 hash digest implemented).
+- [x] **Finding 3:** Insufficient entropy in session invalidation `pwdSig` (**FIXED** — 128-bit SHA-256 hash digest implemented; legacy 16-character fallback removed).
 - [x] **Finding 4:** Timing side-channel and account enumeration on password reset (**FIXED** — asynchronous Resend dispatch, dummy DB queries, and uniform delay equalization).
 - [x] **Finding 5:** API error leakage (**FIXED** — centralized response helper intercepts 500 errors and masks raw messages).
+- [x] **Finding 6:** Identity lookup using non-unique `name` column (**FIXED** — identity lookup strictly restricted to unique `email` and primary key `id`).
 
 ### Remaining Issues
-- [ ] **Finding 6 (Informational / Low):** `getUserByEmailOrUsername` includes non-unique `name` column in SQL query (Low risk; consider restricting login to unique email only).
+- None. All identified authentication, authorization, secret disclosure, timing, and lookup ambiguities have been systematically addressed and verified.
 
 ### Items Requiring Production Verification
 1. **Environment Variables:** Confirm `ADMIN_SECRET`, `COURIER_WEBHOOK_SECRET`, `SUPER_ADMIN_EMAILS`, and `RESEND_API_KEY` are configured as Cloudflare Worker Secrets in production.

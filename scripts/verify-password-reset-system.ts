@@ -160,10 +160,11 @@ async function verifyPasswordResetSystem() {
             }
             return null;
           }
-          if (query.includes('FROM users WHERE LOWER(TRIM(email)) = ? OR LOWER(TRIM(name)) = ? OR id = ?')) {
+          if (query.includes('FROM users WHERE LOWER(TRIM(email)) = ? OR id = ?') || query.includes('FROM users WHERE LOWER(TRIM(email)) = ? OR LOWER(TRIM(name)) = ? OR id = ?')) {
             const cleanArg = String(args[0] || '').toLowerCase().trim();
+            const idArg = args.length > 2 ? args[2] : args[1];
             for (const u of mockUsers.values()) {
-              if (u.email.toLowerCase().trim() === cleanArg || u.id === args[2]) return { ...u };
+              if (u.email.toLowerCase().trim() === cleanArg || u.id === idArg) return { ...u };
             }
             return null;
           }

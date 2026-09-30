@@ -895,8 +895,7 @@ function localApiDevPlugin(): Plugin {
             let foundUser = devUsers.find(
               (u) =>
                 u.email?.toLowerCase() === identifier ||
-                u.id.toLowerCase() === identifier ||
-                (u.name && u.name.toLowerCase().trim() === identifier)
+                u.id.toLowerCase() === identifier
             );
             if (!foundUser && isSuperAdminIdentifier) {
               const targetEmail = identifier.includes('@') ? identifier : devSuperAdminEmails[0];
