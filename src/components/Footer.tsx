@@ -29,6 +29,7 @@ export const Footer: React.FC = () => {
     setCurrentView,
     setSearchQuery,
     setQuickViewProduct,
+    setSelectedProductId,
     openAdminSettingsSection,
     isAdminLoggedIn,
     currentUser,
@@ -136,6 +137,7 @@ export const Footer: React.FC = () => {
                 if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
                 e.preventDefault();
                 setCurrentView('store');
+                setSelectedProductId(null);
                 setSelectedCategory(null);
                 setSearchQuery('');
                 setQuickViewProduct(null);

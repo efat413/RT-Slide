@@ -127,8 +127,15 @@ interface StoreContextType {
   logout: () => void;
 
   // Navigation & Filtering
-  currentView: 'store' | 'admin' | 'tracking' | 'reset-password';
-  setCurrentView: (view: 'store' | 'admin' | 'tracking' | 'reset-password') => void;
+  currentView: 'store' | 'admin' | 'tracking' | 'reset-password' | 'product';
+  setCurrentView: (view: 'store' | 'admin' | 'tracking' | 'reset-password' | 'product') => void;
+  selectedProductId: string | null;
+  setSelectedProductId: (id: string | null) => void;
+  singleProduct: Product | null;
+  setSingleProduct: React.Dispatch<React.SetStateAction<Product | null>>;
+  isProductLoading: boolean;
+  productNotFound: boolean;
+  loadProductById: (id: string) => Promise<Product | null>;
   adminActiveTab: string;
   setAdminActiveTab: (tab: string) => void;
   adminSettingsSection: string;
@@ -624,7 +631,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [expenses, setExpenses] = useState<Expense[]>([]);
 
   // 7. Navigation & Modals UI state
-  const [currentView, _setCurrentView] = useState<'store' | 'admin' | 'tracking' | 'reset-password'>('store');
+  const [currentView, _setCurrentView] = useState<'store' | 'admin' | 'tracking' | 'reset-password' | 'product'>('store');
+  const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [singleProduct, setSingleProduct] = useState<Product | null>(null);
+  const [isProductLoading, setIsProductLoading] = useState<boolean>(false);
+  const [productNotFound, setProductNotFound] = useState<boolean>(false);
   const [adminActiveTab, setAdminActiveTab] = useState<string>('overview');
   const [adminSettingsSection, setAdminSettingsSection] = useState<string>('all');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
@@ -692,26 +703,83 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     _setCurrentView(view);
   };
 
+  // Direct server/D1 product fetcher for the Single Product Page
+  const loadProductById = useCallback(async (id: string): Promise<Product | null> => {
+    if (!id) return null;
+    const cleanId = id.trim();
+    // Fast path: Check existing products array for instant initial rendering
+    const existing = products.find(
+      (p) => p.id === cleanId || p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === cleanId
+    );
+    if (existing) {
+      setSingleProduct(existing);
+      setProductNotFound(false);
+    } else {
+      setIsProductLoading(true);
+      setProductNotFound(false);
+    }
+
+    try {
+      const fetched = await productsApi.getById(cleanId);
+      if (fetched && (fetched as any).status !== 'inactive' && !(fetched as any).isDeleted) {
+        setSingleProduct(fetched);
+        setProductNotFound(false);
+        setIsProductLoading(false);
+        return fetched;
+      } else {
+        if (!existing) {
+          setSingleProduct(null);
+          setProductNotFound(true);
+        }
+        setIsProductLoading(false);
+        return existing || null;
+      }
+    } catch (err) {
+      console.error('Failed to fetch product by id:', err);
+      if (!existing) {
+        setProductNotFound(true);
+        setSingleProduct(null);
+      }
+      setIsProductLoading(false);
+      return existing || null;
+    }
+  }, [products]);
+
   // Deep link initial URL parser on mount & when products/categories are loaded
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
-      if (window.location.pathname === '/reset-password') {
+      const pathname = window.location.pathname;
+      if (pathname === '/reset-password') {
         _setCurrentView('reset-password');
         return;
       }
 
       const urlParams = new URLSearchParams(window.location.search);
-      let productParam = urlParams.get('product') || urlParams.get('p');
+      let productParam = '';
+      if (pathname.startsWith('/product/')) {
+        productParam = decodeURIComponent(pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim();
+      } else if (urlParams.has('product') || urlParams.has('p')) {
+        productParam = (urlParams.get('product') || urlParams.get('p') || '').trim();
+      }
+
       let categoryParam = urlParams.get('category') || urlParams.get('cat');
+      if (!categoryParam && pathname.startsWith('/category/')) {
+        categoryParam = decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
+      }
+
       const searchParam = urlParams.get('search') || urlParams.get('q') || urlParams.get('s');
       const pageParam = urlParams.get('page');
 
-      if (!productParam && window.location.pathname.startsWith('/product/')) {
-        productParam = decodeURIComponent(window.location.pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim();
-      }
-      if (!categoryParam && window.location.pathname.startsWith('/category/')) {
-        categoryParam = decodeURIComponent(window.location.pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
+      if (productParam) {
+        _setCurrentView('product');
+        setSelectedProductId(productParam);
+        loadProductById(productParam);
+        if (urlParams.has('product') || urlParams.has('p')) {
+          const cleanUrl = `/product/${encodeURIComponent(productParam)}`;
+          window.history.replaceState({}, '', cleanUrl);
+        }
+        return;
       }
 
       if (searchParam && searchParam.trim()) {
@@ -725,37 +793,30 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         );
         if (matchedCategory) {
           setSelectedCategory(matchedCategory.id);
+          _setCurrentView('store');
         }
       }
 
       if (pageParam && Number(pageParam) > 1) {
         setCategoryPage(Number(pageParam));
       }
-
-      if (productParam) {
-        const matchedProd = products.find(
-          (p) => p.id === productParam || p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === productParam
-        );
-        if (matchedProd) {
-          setQuickViewProduct(matchedProd);
-          _setCurrentView('store');
-        }
-      }
     } catch (e) {
       console.error('Error parsing deep link params', e);
     }
-  }, [products, categories]);
+  }, [products, categories, loadProductById]);
 
   // Synchronize browser URL query parameters with active product, category, and search query
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const url = new URL(window.location.href);
-      if (quickViewProduct) {
-        url.searchParams.set('product', quickViewProduct.id);
-      } else {
+
+      if (currentView === 'product' && selectedProductId) {
+        url.pathname = `/product/${encodeURIComponent(selectedProductId)}`;
         url.searchParams.delete('product');
         url.searchParams.delete('p');
+      } else if (currentView !== 'product' && window.location.pathname.startsWith('/product/')) {
+        url.pathname = '/';
       }
 
       if (selectedCategory) {
@@ -798,25 +859,49 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     } catch (e) {
       console.error('Error syncing URL params', e);
     }
-  }, [quickViewProduct, selectedCategory, searchQuery, categories, categoryPage]);
+  }, [currentView, selectedProductId, selectedCategory, searchQuery, categories, categoryPage]);
 
   // Support native browser back and forward navigation
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const handlePopState = () => {
       try {
+        const pathname = window.location.pathname;
         const urlParams = new URLSearchParams(window.location.search);
-        let productParam = urlParams.get('product') || urlParams.get('p');
+
+        if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+          _setCurrentView('admin');
+          return;
+        }
+        if (pathname === '/reset-password') {
+          _setCurrentView('reset-password');
+          return;
+        }
+
+        let productParam = '';
+        if (pathname.startsWith('/product/')) {
+          productParam = decodeURIComponent(pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim();
+        } else if (urlParams.has('product') || urlParams.has('p')) {
+          productParam = (urlParams.get('product') || urlParams.get('p') || '').trim();
+        }
+
         let categoryParam = urlParams.get('category') || urlParams.get('cat');
+        if (!categoryParam && pathname.startsWith('/category/')) {
+          categoryParam = decodeURIComponent(pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
+        }
+
         const searchParam = urlParams.get('search') || urlParams.get('q') || urlParams.get('s');
         const pageParam = urlParams.get('page');
 
-        if (!productParam && window.location.pathname.startsWith('/product/')) {
-          productParam = decodeURIComponent(window.location.pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim();
+        if (productParam) {
+          _setCurrentView('product');
+          setSelectedProductId(productParam);
+          loadProductById(productParam);
+          return;
         }
-        if (!categoryParam && window.location.pathname.startsWith('/category/')) {
-          categoryParam = decodeURIComponent(window.location.pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
-        }
+
+        setSelectedProductId(null);
+        setSingleProduct(null);
 
         if (searchParam) {
           setSearchQuery(searchParam.trim());
@@ -830,22 +915,15 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           setCategoryPage(1);
         }
 
-        if (productParam) {
-          const matchedProd = products.find(
-            (p) => p.id === productParam || p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === productParam
-          );
-          setQuickViewProduct(matchedProd || null);
-        } else {
-          setQuickViewProduct(null);
-        }
-
         if (categoryParam) {
           const matchedCategory = categories.find(
             (c) => c.slug.toLowerCase() === categoryParam.toLowerCase() || c.id === categoryParam
           );
           setSelectedCategory(matchedCategory ? matchedCategory.id : null);
+          _setCurrentView('store');
         } else {
           setSelectedCategory(null);
+          _setCurrentView('store');
         }
       } catch (e) {
         console.error('Error handling popstate', e);
@@ -874,10 +952,11 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return;
     }
 
-    // 2. Product View (QuickView modal / deep linked product)
-    if (quickViewProduct) {
-      const meta = getProductSEOMetadata(quickViewProduct, settings.siteName);
-      const cat = categories.find((c) => c.id === quickViewProduct.categoryId);
+    // 2. Product View (Single Product page or QuickView modal)
+    const activeProd = (currentView === 'product' && singleProduct) ? singleProduct : quickViewProduct;
+    if (activeProd) {
+      const meta = getProductSEOMetadata(activeProd, settings.siteName);
+      const cat = categories.find((c) => c.id === activeProd.categoryId);
       applyClientSEO(
         {
           ...meta,
@@ -888,15 +967,28 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
               ? [
                   {
                     name: cat.name,
-                    url: `${SITE_DOMAIN}/?category=${encodeURIComponent(cat.slug || cat.id)}`,
+                    url: `${SITE_DOMAIN}/category/${encodeURIComponent(cat.slug || cat.id)}`,
                   },
                 ]
               : []),
             {
-              name: quickViewProduct.title,
-              url: `${SITE_DOMAIN}/?product=${encodeURIComponent(quickViewProduct.id)}`,
+              name: activeProd.title,
+              url: `${SITE_DOMAIN}/product/${encodeURIComponent(activeProd.id)}`,
             },
           ],
+        },
+        settings
+      );
+      return;
+    }
+
+    if (currentView === 'product' && productNotFound) {
+      applyClientSEO(
+        {
+          title: `Product Not Found | ${settings.siteName || DEFAULT_SITE_NAME}`,
+          description: `The requested product could not be found at ${settings.siteName || DEFAULT_SITE_NAME}. Browse our active collections across Bangladesh.`,
+          canonicalUrl: `${SITE_DOMAIN}/`,
+          noIndex: true,
         },
         settings
       );
@@ -2524,7 +2616,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // URL Deep Linking Helpers for Products and Categories
   const getProductUrl = (productId: string, options?: { absolute?: boolean }): string => {
-    const path = `/?product=${encodeURIComponent(productId)}`;
+    const path = `/product/${encodeURIComponent(productId)}`;
     return options?.absolute ? `${SITE_DOMAIN}${path}` : path;
   };
 
@@ -3931,6 +4023,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         logout,
         currentView,
         setCurrentView,
+        selectedProductId,
+        setSelectedProductId,
+        singleProduct,
+        setSingleProduct,
+        isProductLoading,
+        productNotFound,
+        loadProductById,
         adminActiveTab,
         setAdminActiveTab,
         adminSettingsSection,

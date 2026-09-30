@@ -615,7 +615,7 @@ export function getProductSEOMetadata(
 
   const description = `${cleanTitle} কিনুন বাংলাদেশে। দাম ৳${product.price.toLocaleString()}। ${cleanDescSnippet} বিস্তারিত তথ্য ও ফিচার দেখে ${siteName} থেকে অনলাইনে অর্ডার করুন।`;
 
-  const canonicalUrl = `${SITE_DOMAIN}/?product=${encodeURIComponent(product.id)}`;
+  const canonicalUrl = `${SITE_DOMAIN}/product/${encodeURIComponent(product.id)}`;
   const ogImage = product.imageUrl || (product.images && product.images[0]) || DEFAULT_FALLBACK_IMAGE;
 
   return {
@@ -721,7 +721,7 @@ export function generateProductSchema(
   categoryName?: string,
   siteName: string = DEFAULT_SITE_NAME
 ) {
-  const canonicalUrl = `${SITE_DOMAIN}/?product=${encodeURIComponent(product.id)}`;
+  const canonicalUrl = `${SITE_DOMAIN}/product/${encodeURIComponent(product.id)}`;
   const images = (product.images && product.images.length > 0)
     ? product.images
     : [product.imageUrl || DEFAULT_FALLBACK_IMAGE];
@@ -825,7 +825,7 @@ export function generateSitemapXml(
     }
 
     addUrl(
-      `${SITE_DOMAIN}/?product=${encodeURIComponent(prod.id)}`,
+      `${SITE_DOMAIN}/product/${encodeURIComponent(prod.id)}`,
       prodDate,
       'weekly',
       prod.featured ? '0.9' : '0.7'

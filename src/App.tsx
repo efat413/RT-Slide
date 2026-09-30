@@ -14,6 +14,7 @@ import { ToastNotification } from './components/ToastNotification';
 import { Footer } from './components/Footer';
 import { CategoryProductCarousel } from './components/CategoryProductCarousel';
 import { CategoryListingView } from './components/CategoryListingView';
+import { ProductDetailView } from './components/ProductDetailView';
 
 // Code-splitting: Lazy-load admin application and reset-password page
 // Storefront visitors do NOT download heavy admin chunks during normal browsing
@@ -80,6 +81,7 @@ const StoreContent: React.FC = () => {
     searchQuery,
     setSearchQuery,
     currentView,
+    selectedProductId,
     quickViewProduct,
     setQuickViewProduct,
     videoModalProduct,
@@ -117,24 +119,10 @@ const StoreContent: React.FC = () => {
     if (typeof window === 'undefined') return;
     if (isStoreInitializing) return; // Wait until D1 store data is loaded
     const params = new URLSearchParams(window.location.search);
-    let prod = params.get('product') || params.get('p');
     let cat = params.get('category') || params.get('cat');
 
-    if (!prod && window.location.pathname.startsWith('/product/')) {
-      prod = decodeURIComponent(window.location.pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim();
-    }
     if (!cat && window.location.pathname.startsWith('/category/')) {
       cat = decodeURIComponent(window.location.pathname.replace(/^\/category\//, '').replace(/\/$/, '')).trim();
-    }
-
-    if (prod && products.length > 0) {
-      const found = products.some(
-        (p) => p.id === prod || p.title.toLowerCase().replace(/[^a-z0-9]+/g, '-') === prod
-      );
-      if (!found) {
-        setInvalidNotice(`The product "${prod}" was not found or has been removed.`);
-        return;
-      }
     }
 
     if (cat && categories.length > 0) {
@@ -146,7 +134,7 @@ const StoreContent: React.FC = () => {
     }
 
     setInvalidNotice(null);
-  }, [products, categories, isStoreInitializing]);
+  }, [categories, isStoreInitializing]);
 
   if (currentView === 'reset-password' || (typeof window !== 'undefined' && window.location.pathname === '/reset-password')) {
     return (
@@ -179,6 +167,56 @@ const StoreContent: React.FC = () => {
         <AuthModal />
         <ToastNotification />
       </>
+    );
+  }
+
+  // Single Product Route (/product/:id)
+  const isProductRoute =
+    currentView === 'product' ||
+    (typeof window !== 'undefined' && window.location.pathname.startsWith('/product/'));
+  const currentProductId =
+    selectedProductId ||
+    (typeof window !== 'undefined' && window.location.pathname.startsWith('/product/')
+      ? decodeURIComponent(window.location.pathname.replace(/^\/product\//, '').replace(/\/$/, '')).trim()
+      : null);
+
+  if (isProductRoute && currentProductId) {
+    return (
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-rose-500 selection:text-white">
+        <div>
+          <Header />
+          <main className="max-w-7xl mx-auto px-4 sm:px-6">
+            <ProductDetailView productId={currentProductId} />
+          </main>
+        </div>
+        <Footer />
+        <CartDrawer />
+        <WishlistDrawer />
+        <UserAccountModal
+          isOpen={isUserAccountModalOpen}
+          onClose={() => setIsUserAccountModalOpen(false)}
+        />
+        <QuickViewModal
+          product={quickViewProduct}
+          onClose={() => setQuickViewProduct(null)}
+        />
+        <ProductVideoModal
+          isOpen={Boolean(videoModalProduct)}
+          onClose={() => setVideoModalProduct(null)}
+          product={
+            (videoModalProduct && products.find((p) => p.id === videoModalProduct.id)) ||
+            videoModalProduct
+          }
+          initialMode={videoModalMode}
+          onEnterFloatingMode={() => setQuickViewProduct(null)}
+        />
+        <OrderSuccessModal
+          order={recentSuccessOrder}
+          onClose={() => setRecentSuccessOrder(null)}
+        />
+        <AuthModal />
+        <ToastNotification />
+      </div>
     );
   }
 

@@ -14,6 +14,7 @@ import {
 } from '../types';
 import {
   D1Database,
+  D1PreparedStatement,
   OrderRow,
   ProductRow,
   CategoryRow,

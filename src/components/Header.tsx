@@ -56,6 +56,7 @@ export const Header: React.FC = () => {
     setIsUserAccountModalOpen,
     setUserAccountModalTab,
     setQuickViewProduct,
+    setSelectedProductId,
   } = useStore();
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -130,6 +131,7 @@ export const Header: React.FC = () => {
 
   const handleCategorySelect = (categoryId: string | null) => {
     setSelectedCategory(categoryId);
+    setSelectedProductId(null);
     setMobileMenuOpen(false);
     setCurrentView('store');
     const el = document.getElementById('products-feed-section');
@@ -145,6 +147,7 @@ export const Header: React.FC = () => {
       e.stopPropagation();
     }
     setCurrentView('store');
+    setSelectedProductId(null);
     setSelectedCategory(null);
     setSearchQuery('');
     setQuickViewProduct(null);

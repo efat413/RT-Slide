@@ -70,35 +70,38 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
   const secondaryImgProps = secondaryImage ? getResponsiveImageProps(secondaryImage, 'card') : null;
 
   return (
-    <div
-      onClick={() => setQuickViewProduct(product)}
-      className="group relative bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden cursor-pointer hover:-translate-y-1"
-    >
+    <div className="group relative bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-1">
       {/* Dynamic Rainbow Top Accent on hover */}
       <div className="h-1 w-full bg-transparent group-hover:rainbow-gradient-bg transition-all duration-300" />
 
       {/* Image Container */}
       <div className="relative aspect-square w-full bg-slate-100 overflow-hidden">
-        <img
-          {...primaryImgProps}
-          alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'}`}
-          className={`w-full h-full object-cover object-center transition-all duration-500 ease-out ${
-            secondaryImage ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
-          }`}
-        />
-
-        {/* Alternate angle reveal on hover if multiple images exist */}
-        {secondaryImage && secondaryImgProps && (
+        <a
+          href={getProductUrl(product.id)}
+          className="block w-full h-full cursor-pointer"
+          title={product.title}
+        >
           <img
-            {...secondaryImgProps}
-            alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'} view 2`}
-            className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 ease-out"
+            {...primaryImgProps}
+            alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'}`}
+            className={`w-full h-full object-cover object-center transition-all duration-500 ease-out ${
+              secondaryImage ? 'group-hover:opacity-0 group-hover:scale-105' : 'group-hover:scale-105'
+            }`}
           />
-        )}
+
+          {/* Alternate angle reveal on hover if multiple images exist */}
+          {secondaryImage && secondaryImgProps && (
+            <img
+              {...secondaryImgProps}
+              alt={`${product.title} - ${category ? category.name : 'Rongdhonu Trade'} view 2`}
+              className="absolute inset-0 w-full h-full object-cover object-center opacity-0 group-hover:opacity-100 group-hover:scale-105 transition-all duration-500 ease-out"
+            />
+          )}
+        </a>
 
         {/* Multiple Photos Indicator Badge */}
         {hasMultipleImages && (
-          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/75 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1 shadow-xs z-10 transition-opacity group-hover:opacity-90">
+          <span className="absolute bottom-2.5 right-2.5 px-2 py-0.5 rounded-full bg-slate-900/75 backdrop-blur-xs text-white text-[10px] font-bold flex items-center gap-1 shadow-xs z-10 transition-opacity group-hover:opacity-90 pointer-events-none">
             <Images className="w-3 h-3 text-rose-400" />
             {product.images?.length}
           </span>
@@ -139,7 +142,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Badges Overlay */}
-        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10">
+        <div className="absolute top-2.5 left-2.5 flex flex-col gap-1.5 z-10 pointer-events-none">
           {discountPercent > 0 && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold tracking-wider text-white bg-rose-600 shadow-sm flex items-center gap-1">
               {discountPercent}% OFF
@@ -158,7 +161,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
         </div>
 
         {/* Quick View Button on hover (Desktop) */}
-        <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center p-3">
+        <div className="absolute inset-0 bg-slate-900/30 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center p-3 pointer-events-none">
           <button
             type="button"
             id={`quick-view-btn-${product.id}`}
@@ -166,7 +169,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
               e.stopPropagation();
               setQuickViewProduct(product);
             }}
-            className="px-4 py-2 rounded-xl bg-white/95 hover:bg-white text-slate-900 text-xs font-bold shadow-xl flex items-center gap-1.5 backdrop-blur-xs transform translate-y-2 group-hover:translate-y-0 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
+            className="pointer-events-auto px-4 py-2 rounded-xl bg-white/95 hover:bg-white text-slate-900 text-xs font-bold shadow-xl flex items-center gap-1.5 backdrop-blur-xs transform translate-y-2 group-hover:translate-y-0 hover:scale-105 active:scale-95 transition-all duration-200 cursor-pointer"
             title="Quick view product details"
           >
             <Eye className="w-4 h-4 text-rose-600" />
@@ -229,11 +232,6 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
           {/* Title */}
           <a
             href={getProductUrl(product.id)}
-            onClick={(e) => {
-              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
-              e.preventDefault();
-              setQuickViewProduct(product);
-            }}
             className="block group-hover:text-rose-600 transition-colors"
           >
             <h3 className="font-bold text-xs sm:text-sm text-slate-800 group-hover:text-rose-600 transition-colors mt-1 line-clamp-2 leading-tight sm:leading-snug min-h-[2rem] sm:min-h-0">

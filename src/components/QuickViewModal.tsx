@@ -502,9 +502,14 @@ export const QuickViewModal: React.FC<QuickViewModalProps> = ({ product: propPro
                 {category.name}
               </a>
             )}
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold font-display text-slate-900 mt-2">
-              {product.title}
-            </h1>
+            <a
+              href={getProductUrl(product.id)}
+              className="block group-hover:text-rose-600 transition-colors"
+            >
+              <h1 className="text-lg sm:text-xl md:text-2xl font-bold font-display text-slate-900 hover:text-rose-600 transition-colors mt-2">
+                {product.title}
+              </h1>
+            </a>
 
             {/* Star Rating & Reviews Tab Trigger */}
             <div className="flex items-center justify-between gap-2 mt-2">
