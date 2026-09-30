@@ -33,7 +33,7 @@ The following matrix documents the verification scripts actually executed during
 | **Fixes & Worker Integrity** | `scripts/verify-fixes.ts` | **PASS** | 38/38 checks passed: Product SSR injection, Category SSR injection, `ADMIN_SECRET` fail-closed production security, robots.txt & sitemap.xml route rules. |
 | **Security Hardening** | `scripts/verify-security-hardening.ts` | **PASS** | 4/4 checks passed: Registration rate limiting (429), SSRF block against 16 metadata/loopback targets, PNG magic bytes, path traversal rejection, sanitized public health check. |
 | **Courier Webhook Security** | `scripts/verify-courier-webhook-security.ts` | **PASS** | 17/17 checks passed: Webhook secret masking (`••••••••`), controlled merge preservation, HMAC-SHA256 signature verification, RBAC `courier.configure` gating. |
-| **Password Reset System** | `scripts/verify-password-reset-system.ts` | **PASS** | Anti-enumeration identical response for existing/non-existing accounts, server-side rate limiting (attempt 6 -> 429), SHA-256 token hash storage, single-use enforcement, 15-min expiration. |
+| **Password Reset System** | `scripts/verify-password-reset-system.ts` | **PASS** | Anti-enumeration identical response for existing/non-existing accounts, server-side rate limiting (attempt 6 -> 429), SHA-256 token hash storage, single-use enforcement, 60-minute expiration (15-min rate limit attempt window). |
 | **Final Performance Audit** | `scripts/verify-final-performance-audit.ts` | **PASS** | HTML preconnects, in-flight request deduplication (3 concurrent calls -> exactly 1 network request for homepage & auth), LCP eager banner loading, card lazy loading. |
 | **Homepage Performance** | `scripts/verify-homepage-performance.ts` | **PASS** | Consolidated `/api/store/homepage` average latency ~20.91ms, 36.63 KB payload, public stale-while-revalidate caching, strictly sanitized public product objects. |
 | **Image Performance** | `scripts/verify-image-performance.ts` | **PASS** | Responsive image presets (card, thumbnail, detail, banner, logo), query transformation (`?w=&q=`), WebP format negotiation, immutable media cache headers. |
@@ -127,8 +127,8 @@ The database schema is managed via Cloudflare D1 SQL migrations. Exactly **10 mi
 * **Super Admin Identity Protection:** **PASS** — Resolved strictly from server environment variables; hidden from non-super-admins in user listings.
 * **Financial Protection:** **PASS** — Server-side recalculation of order totals, prices, and delivery charges. `buyingPrice` and `unitProfit` stripped from all public endpoints.
 * **Courier & Webhook Protection:** **PASS** — Courier secrets masked as `••••••••` in all admin APIs. Inbound webhooks verified with HMAC-SHA256. Outbound test webhooks protected by SSRF filtering against loopback and AWS/GCP metadata endpoints.
-* **Password Reset System:** **PASS** — Anti-enumeration generic 200 responses; 64-character crypto-random token; SHA-256 token hash storage; single-use token invalidation; 15-minute expiration; server-side rate-limited.
-* **Password Change:** **PASS** — Requires current password verification; rotating `pwdSig` invalidates all prior sessions across devices.
+* **Password Reset System:** **PASS** — Anti-enumeration generic 200 responses; 64-character crypto-random token; SHA-256 token hash storage; single-use token invalidation; 60-minute expiration; server-side rate-limited (15-min attempt window).
+* **Password Change:** **PASS** — Requires current password verification; rotating 32-hex (128-bit) `pwdSig` invalidates all prior sessions across devices (legacy 16-character format strictly rejected).
 * **Image Upload Security:** **PASS** — Magic-byte header verification, random media keys, path traversal protection, and rate limiting (10 uploads/min).
 * **Database Parameterization:** **PASS** — Parameterized queries across all D1 operations.
 

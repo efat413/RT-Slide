@@ -17,7 +17,7 @@ This document specifies the security requirements, architectural boundaries, and
 ## 2. Session Security
 
 - **Signed Tokens:** Authentication tokens are cryptographically signed using HMAC-SHA256 (`createAuthToken()` in `src/server/auth.ts`) with `ADMIN_SECRET` from worker environment variables. In production, missing secrets trigger immediate fail-closed behavior.
-- **Session Expiry & Revocation:** Tokens carry an explicit expiration timestamp (`exp`). In addition, tokens incorporate a 256-bit password signature (`pwdSig` derived via `computePasswordSignature()` from the password hash). Modifying a user's password or revoking credentials immediately invalidates all prior issued tokens.
+- **Session Expiry & Revocation:** Tokens carry an explicit expiration timestamp (`exp`). In addition, tokens incorporate a 32-character hexadecimal password signature (`pwdSig`, representing 128 bits derived via `computePasswordSignature()` from the first 16 bytes of the SHA-256 digest of the password hash). Modifying a user's password or revoking credentials immediately invalidates all prior issued tokens across all devices (legacy 16-character prefix signatures are unconditionally rejected).
 - **No Authentication Bypasses:** Protected API routes must invoke `requireAuth(request, env)`. Never introduce bypass flags, debug backdoors, or default unauthenticated admin fallbacks in production endpoints.
 
 ---
@@ -75,7 +75,7 @@ This document specifies the security requirements, architectural boundaries, and
 
 - **Token Generation & Storage:** Password reset tokens must be generated using cryptographically strong random bytes (32 bytes / 64 hex characters via `crypto.getRandomValues`).
 - **Hashed in Storage:** Plaintext reset tokens must never be saved to the database. Only the SHA-256 hash of the token is stored in the `password_reset_tokens` table.
-- **Short Lifetime & Single-Use:** Tokens must expire within a short window (60 minutes) and must be marked as used (`used_at`) immediately upon successful password change.
+- **Short Lifetime & Single-Use:** Tokens carry a 60-minute expiration window (`expiresAt = Date.now() + 60 * 60 * 1000` in `src/server/router.ts`), matching the email notification and client messaging, while the token verification attempt rate-limiter operates on a 15-minute sliding window (900 seconds). Tokens are marked as used (`used_at`) immediately upon successful password change to enforce single-use invalidation.
 - **Anti-Enumeration Timing Protection:** The `POST /api/auth/forgot-password` endpoint must return the exact same generic success message (`RESET_EMAIL_SENT`) regardless of whether the email address exists in the system. When an account is not found, the server must execute dummy cryptographic operations and dummy D1 queries to equalize response latency.
 - **Rate Limiting:** Sliding-window rate limiting is enforced on password reset requests across client IP (`pwd-reset-ip`), target email (`pwd-reset-email`), and IP-email tuples.
 
