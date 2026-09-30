@@ -512,7 +512,7 @@ const StoreContent: React.FC = () => {
                         window.history.pushState({}, '', categoryUrl);
                         window.scrollTo({ top: 0, behavior: 'smooth' });
                       }}
-                      priorityFirst={idx === 0}
+                      priorityFirst={idx === 0 || homeCategoryFilter !== 'all'}
                     />
                   );
                 })}

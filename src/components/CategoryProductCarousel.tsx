@@ -16,11 +16,54 @@ const CategoryProductCarouselComponent: React.FC<CategoryProductCarouselProps> =
   onViewAll,
   priorityFirst = false,
 }) => {
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const [isIntersected, setIsIntersected] = useState<boolean>(
+    () => priorityFirst || (typeof window !== 'undefined' && typeof IntersectionObserver === 'undefined')
+  );
   const [startIndex, setStartIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isDesktop, setIsDesktop] = useState(
     typeof window !== 'undefined' ? window.innerWidth >= 768 : true
   );
+
+  // Progressive Viewport IntersectionObserver
+  useEffect(() => {
+    if (isIntersected) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setIsIntersected(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const [entry] = entries;
+        if (entry && (entry.isIntersecting || entry.intersectionRatio > 0)) {
+          setIsIntersected(true);
+          observer.disconnect();
+        }
+      },
+      {
+        root: null,
+        rootMargin: '350px 0px',
+        threshold: 0,
+      }
+    );
+
+    const el = sectionRef.current;
+    if (el) {
+      observer.observe(el);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [isIntersected]);
+
+  useEffect(() => {
+    if (priorityFirst && !isIntersected) {
+      setIsIntersected(true);
+    }
+  }, [priorityFirst, isIntersected]);
 
   // Mobile touch swipe handling
   const touchStartXRef = useRef<number | null>(null);
@@ -40,14 +83,14 @@ const CategoryProductCarouselComponent: React.FC<CategoryProductCarouselProps> =
 
   // Auto-slide every 4.5 seconds (cycles through already-loaded products, NO API requests)
   useEffect(() => {
-    if (isPaused || totalItems <= visibleCount) return;
+    if (!isIntersected || isPaused || totalItems <= visibleCount) return;
 
     const interval = setInterval(() => {
       setStartIndex((prev) => (prev + 1) % totalItems);
     }, 4500);
 
     return () => clearInterval(interval);
-  }, [isPaused, totalItems, visibleCount]);
+  }, [isIntersected, isPaused, totalItems, visibleCount]);
 
   if (!products || products.length === 0) {
     return null;
@@ -102,7 +145,8 @@ const CategoryProductCarouselComponent: React.FC<CategoryProductCarouselProps> =
 
   return (
     <section
-      className="py-6 sm:py-8 border-b border-slate-200/80 last:border-b-0"
+      ref={sectionRef}
+      className="py-6 sm:py-8 border-b border-slate-200/80 last:border-b-0 min-h-[380px]"
       aria-label={`${category.name} collection carousel`}
     >
       {/* Category Section Header */}
@@ -167,45 +211,62 @@ const CategoryProductCarouselComponent: React.FC<CategoryProductCarouselProps> =
       </div>
 
       {/* Carousel Container */}
-      <div
-        className="relative"
-        onMouseEnter={() => setIsPaused(true)}
-        onMouseLeave={() => setIsPaused(false)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      >
-        {/* Products Grid: 3 on desktop, 2 on mobile */}
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-5">
-          {visibleProducts.map((product, idx) => (
+      {!isIntersected ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-5" aria-hidden="true">
+          {Array.from({ length: visibleCount }).map((_, i) => (
             <div
-              key={`${category.id}-${product.id}-${idx}`}
-              className="transition-all duration-300 transform"
+              key={`ph-${category.id}-${i}`}
+              className="bg-white rounded-2xl border border-slate-200 p-3 sm:p-4 flex flex-col justify-between shadow-2xs"
             >
-              <ProductCard product={product} priority={priorityFirst && idx === 0} />
+              <div className="aspect-square w-full bg-slate-100 rounded-xl animate-pulse" />
+              <div className="mt-3 space-y-2">
+                <div className="h-4 bg-slate-100 rounded-md w-3/4 animate-pulse" />
+                <div className="h-3 bg-slate-100 rounded-md w-1/2 animate-pulse" />
+              </div>
             </div>
           ))}
         </div>
-
-        {/* Carousel Position Indicators (Dots) */}
-        {totalItems > visibleCount && (
-          <div className="flex items-center justify-center gap-1.5 mt-3 pt-1">
-            {Array.from({ length: totalItems }).map((_, dotIdx) => (
-              <button
-                key={dotIdx}
-                type="button"
-                onClick={() => setStartIndex(dotIdx)}
-                aria-label={`Go to slide ${dotIdx + 1} of ${category.name}`}
-                className={`transition-all duration-200 rounded-full cursor-pointer ${
-                  startIndex === dotIdx
-                    ? 'w-5 h-1.5 bg-rose-500'
-                    : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
-                }`}
-              />
+      ) : (
+        <div
+          className="relative"
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        >
+          {/* Products Grid: 3 on desktop, 2 on mobile */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-5">
+            {visibleProducts.map((product, idx) => (
+              <div
+                key={`${category.id}-${product.id}-${idx}`}
+                className="transition-all duration-300 transform"
+              >
+                <ProductCard product={product} priority={priorityFirst && idx === 0} />
+              </div>
             ))}
           </div>
-        )}
-      </div>
+
+          {/* Carousel Position Indicators (Dots) */}
+          {totalItems > visibleCount && (
+            <div className="flex items-center justify-center gap-1.5 mt-3 pt-1">
+              {Array.from({ length: totalItems }).map((_, dotIdx) => (
+                <button
+                  key={dotIdx}
+                  type="button"
+                  onClick={() => setStartIndex(dotIdx)}
+                  aria-label={`Go to slide ${dotIdx + 1} of ${category.name}`}
+                  className={`transition-all duration-200 rounded-full cursor-pointer ${
+                    startIndex === dotIdx
+                      ? 'w-5 h-1.5 bg-rose-500'
+                      : 'w-1.5 h-1.5 bg-slate-300 hover:bg-slate-400'
+                  }`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 };

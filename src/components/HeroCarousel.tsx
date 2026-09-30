@@ -58,7 +58,7 @@ export const HeroCarousel: React.FC = () => {
   const slide = activeSlides[currentSlide] || activeSlides[0];
   const currentBannerUrl = (currentSlide === 0 && settings?.bannerUrl) ? settings.bannerUrl : slide.imageUrl;
   const hasText = Boolean(slide.headline?.trim() || slide.title?.trim());
-  const bannerImageProps = getResponsiveImageProps(currentBannerUrl, 'banner', { priority: true });
+  const bannerImageProps = getResponsiveImageProps(currentBannerUrl, 'banner', { priority: currentSlide === 0 });
 
   const handleShopNow = (catId?: string) => {
     if (catId) {
