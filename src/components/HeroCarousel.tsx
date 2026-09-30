@@ -58,6 +58,7 @@ export const HeroCarousel: React.FC = () => {
   const slide = activeSlides[currentSlide] || activeSlides[0];
   const currentBannerUrl = (currentSlide === 0 && settings?.bannerUrl) ? settings.bannerUrl : slide.imageUrl;
   const hasText = Boolean(slide.headline?.trim() || slide.title?.trim());
+  const bannerImageProps = getResponsiveImageProps(currentBannerUrl, 'banner', { priority: true });
 
   const handleShopNow = (catId?: string) => {
     if (catId) {
@@ -147,17 +148,17 @@ export const HeroCarousel: React.FC = () => {
     >
       {/* Slide Container (Guaranteed 100% width and 100% height from parent fixed aspect ratio) */}
       <div className="relative w-full h-full overflow-hidden">
-        {/* Ambient Blurred Backdrop: Only rendered when fitMode is contain to prevent letterboxing, saving an extra image request when cover is active */}
+        {/* Ambient Blurred Backdrop: Reuses main banner image to eliminate duplicate network request when contain mode is active */}
         {fitMode !== 'cover' && (
           <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
             <img
-              src={getResponsiveImageUrl(currentBannerUrl, 320, 50)}
+              src={bannerImageProps.src}
               alt=""
               aria-hidden="true"
               loading="lazy"
               decoding="async"
-              width={320}
-              height={128}
+              width={bannerImageProps.width}
+              height={bannerImageProps.height}
               className="w-full h-full object-cover blur-xl opacity-35 scale-110"
             />
           </div>
@@ -166,7 +167,7 @@ export const HeroCarousel: React.FC = () => {
         {/* Authoritative Banner Image: Zero stretching, zero distortion, zero forced cropping (LCP prioritized) */}
         <div className="absolute inset-0 z-0 flex items-center justify-center">
           <img
-            {...getResponsiveImageProps(currentBannerUrl, 'banner', { priority: true })}
+            {...bannerImageProps}
             alt={slide.headline || slide.title || 'Promotional Banner'}
             className={`w-full h-full ${fitMode === 'cover' ? 'object-cover' : 'object-contain'} object-center transition-all duration-700`}
             onError={(e) => {

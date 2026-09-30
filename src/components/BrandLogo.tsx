@@ -8,6 +8,7 @@ interface BrandLogoProps {
   showText?: boolean;
   textClassName?: string;
   customLogoUrl?: string;
+  priority?: boolean;
   onClick?: (e?: React.MouseEvent) => void;
 }
 
@@ -17,6 +18,7 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
   showText = true,
   textClassName = '',
   customLogoUrl,
+  priority = false,
   onClick,
 }) => {
   const [imageError, setImageError] = useState(false);
@@ -73,8 +75,9 @@ export const BrandLogo: React.FC<BrandLogoProps> = ({
               alt={`${displayTitle} Logo`}
               width={48}
               height={48}
-              loading="lazy"
-              decoding="async"
+              loading={priority ? 'eager' : 'lazy'}
+              decoding={priority ? 'sync' : 'async'}
+              fetchPriority={priority ? 'high' : 'auto'}
               className="w-full h-full object-contain rounded-lg"
               style={{ aspectRatio: '1 / 1' }}
               referrerPolicy="no-referrer"

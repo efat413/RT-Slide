@@ -228,10 +228,11 @@ export const Header: React.FC = () => {
             {/* On mobile: compact BrandLogo with responsive text, on desktop: medium size */}
             <BrandLogo
               size="sm"
+              priority={true}
               className="md:hidden"
               textClassName="text-xs font-display font-extrabold tracking-tight text-slate-900 whitespace-nowrap"
             />
-            <BrandLogo size="md" className="hidden md:flex" />
+            <BrandLogo size="md" priority={true} className="hidden md:flex" />
           </a>
         </div>
 

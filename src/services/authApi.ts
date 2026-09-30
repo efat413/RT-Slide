@@ -97,6 +97,8 @@ export function removeAuthToken(): void {
   purgeLegacyTokens();
 }
 
+let activeMePromise: Promise<{ success: boolean; user?: UserAccount; status?: number; error?: string }> | null = null;
+
 export const authApi = {
   /**
    * Logs in a user or admin using email/username and password.
@@ -184,26 +186,40 @@ export const authApi = {
    * Does NOT require or send an Authorization header.
    */
   async me(): Promise<{ success: boolean; user?: UserAccount; status?: number; error?: string }> {
-    try {
-      const res = await fetch(`${API_BASE}/auth/me`, {
-        method: 'GET',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
-        },
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || !data.success) {
-        const errorMsg = data.error || `HTTP ${res.status}: Failed to authenticate session`;
-        return { success: false, status: res.status, error: errorMsg };
-      }
-
-      return { success: true, status: res.status, user: data.user };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Network error fetching user' };
+    if (activeMePromise) {
+      return activeMePromise;
     }
+
+    activeMePromise = (async () => {
+      try {
+        const effectiveUrl = typeof window === 'undefined'
+          ? `http://localhost:3000${API_BASE}/auth/me`
+          : `${API_BASE}/auth/me`;
+
+        const res = await fetch(effectiveUrl, {
+          method: 'GET',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-cache, no-store, must-revalidate',
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) {
+          const errorMsg = data.error || `HTTP ${res.status}: Failed to authenticate session`;
+          return { success: false, status: res.status, error: errorMsg };
+        }
+
+        return { success: true, status: res.status, user: data.user };
+      } catch (err: any) {
+        return { success: false, error: err?.message || 'Network error fetching user' };
+      } finally {
+        activeMePromise = null;
+      }
+    })();
+
+    return activeMePromise;
   },
 
   /**
