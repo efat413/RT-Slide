@@ -15,7 +15,7 @@ export const SearchableDistrictSelect: React.FC<SearchableDistrictSelectProps> =
   value,
   onChange,
   hasError = false,
-  placeholder = 'Search District - Upazila/Thana...',
+  placeholder = 'Select City',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');

@@ -21,7 +21,6 @@ import {
   Phone,
   User,
   Home,
-  Mail,
   FileText,
 } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
@@ -105,7 +104,6 @@ interface FormErrors {
   area?: string;
   district?: string;
   altPhone?: string;
-  email?: string;
   general?: string;
 }
 
@@ -130,10 +128,9 @@ export const CartDrawer: React.FC = () => {
   const [fullName, setFullName] = useState(currentUser?.name || '');
   const [phone, setPhone] = useState(currentUser?.phone || '');
   const [address, setAddress] = useState('');
-  const [district, setDistrict] = useState(currentUser?.district || 'Dhaka');
+  const [district, setDistrict] = useState(currentUser?.district || '');
   const [deliveryZone, setDeliveryZone] = useState<DeliveryZone>('inside_dhaka');
   const [altPhone, setAltPhone] = useState('');
-  const [email, setEmail] = useState(currentUser?.email || '');
   const [notes, setNotes] = useState('');
 
   // Payment Selection State
@@ -164,20 +161,19 @@ export const CartDrawer: React.FC = () => {
     if (currentUser) {
       if (!fullName && currentUser.name) setFullName(currentUser.name);
       if (!phone && currentUser.phone) setPhone(currentUser.phone);
-      if (currentUser.district && district === 'Dhaka') {
+      if (currentUser.district && !district) {
         setDistrict(currentUser.district);
-        setDeliveryZone(currentUser.district.toLowerCase() === 'dhaka' ? 'inside_dhaka' : 'outside_dhaka');
+        setDeliveryZone(currentUser.district.toLowerCase().includes('dhaka') ? 'inside_dhaka' : 'outside_dhaka');
       }
-      if (!email && currentUser.email) setEmail(currentUser.email);
     }
   }, [currentUser, isCartOpen]);
 
   // Adjust delivery zone automatically when district changes (user can still manually toggle if desired)
   const handleDistrictChange = (selectedDistrict: string) => {
     setDistrict(selectedDistrict);
-    if (selectedDistrict.toLowerCase().startsWith('dhaka')) {
+    if (selectedDistrict.toLowerCase().includes('dhaka')) {
       setDeliveryZone('inside_dhaka');
-    } else {
+    } else if (selectedDistrict.trim()) {
       setDeliveryZone('outside_dhaka');
     }
     if (validationErrors.district) {
@@ -335,15 +331,7 @@ export const CartDrawer: React.FC = () => {
       }
     }
 
-    // 7. Optional Email validation
-    if (email.trim()) {
-      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      if (!emailRegex.test(email.trim())) {
-        errors.email = 'Please enter a valid email address.';
-      }
-    }
-
-    // 8. DBBL fields if selected
+    // 7. DBBL fields if selected
     if (selectedPayment === 'dbbl') {
       if (!transactionId.trim() || transactionId.trim().length < 4) {
         errors.general = 'Please enter your Bank / NexusPay Transaction ID (TrxID) of at least 4 characters.';
@@ -385,7 +373,7 @@ export const CartDrawer: React.FC = () => {
     try {
       const orderPayload = {
         userId: currentUser?.id,
-        userEmail: email.trim() || currentUser?.email,
+        userEmail: currentUser?.email,
         customer: {
           fullName: fullName.trim(),
           phone: cleanPhone,
@@ -394,7 +382,7 @@ export const CartDrawer: React.FC = () => {
           deliveryZone,
           fullAddress: address.trim(),
           notes: notes.trim() || undefined,
-          email: email.trim() || currentUser?.email,
+          email: currentUser?.email,
           userId: currentUser?.id,
         },
         items: [...cart],
@@ -428,8 +416,8 @@ export const CartDrawer: React.FC = () => {
       setFullName('');
       setPhone('');
       setAddress('');
+      setDistrict(currentUser?.district || '');
       setAltPhone('');
-      setEmail('');
       setNotes('');
       setValidationErrors({});
       handleRemovePromo();
@@ -703,7 +691,7 @@ export const CartDrawer: React.FC = () => {
                         value={district}
                         onChange={(val) => handleDistrictChange(val)}
                         hasError={!!validationErrors.district}
-                        placeholder="Search District - Upazila/Thana..."
+                        placeholder="Select City"
                       />
                       {validationErrors.district && (
                         <p className="text-[11px] text-rose-600 font-medium mt-1 flex items-center gap-1">
@@ -776,54 +764,29 @@ export const CartDrawer: React.FC = () => {
                     )}
                   </div>
 
-                  {/* OPTIONAL FIELDS: ALTERNATIVE PHONE & EMAIL */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                        Alternative Phone <span className="text-slate-400">(Optional)</span>
-                      </label>
-                      <input
-                        type="tel"
-                        value={altPhone}
-                        onChange={(e) => {
-                          setAltPhone(e.target.value);
-                          if (validationErrors.altPhone) {
-                            setValidationErrors((prev) => ({ ...prev, altPhone: undefined }));
-                          }
-                        }}
-                        placeholder="01XXXXXXXXX"
-                        maxLength={15}
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                      />
-                      {validationErrors.altPhone && (
-                        <p className="text-[10px] text-rose-600 font-medium mt-0.5">
-                          {validationErrors.altPhone}
-                        </p>
-                      )}
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-medium text-slate-600 mb-1">
-                        Email <span className="text-slate-400">(Optional)</span>
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => {
-                          setEmail(e.target.value);
-                          if (validationErrors.email) {
-                            setValidationErrors((prev) => ({ ...prev, email: undefined }));
-                          }
-                        }}
-                        placeholder="email@example.com"
-                        className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
-                      />
-                      {validationErrors.email && (
-                        <p className="text-[10px] text-rose-600 font-medium mt-0.5">
-                          {validationErrors.email}
-                        </p>
-                      )}
-                    </div>
+                  {/* OPTIONAL FIELD: ALTERNATIVE PHONE */}
+                  <div className="pt-1">
+                    <label className="block text-[11px] font-medium text-slate-600 mb-1">
+                      Alternative Phone <span className="text-slate-400">(Optional)</span>
+                    </label>
+                    <input
+                      type="tel"
+                      value={altPhone}
+                      onChange={(e) => {
+                        setAltPhone(e.target.value);
+                        if (validationErrors.altPhone) {
+                          setValidationErrors((prev) => ({ ...prev, altPhone: undefined }));
+                        }
+                      }}
+                      placeholder="01XXXXXXXXX"
+                      maxLength={15}
+                      className="w-full px-3 py-1.5 bg-slate-50 border border-slate-300 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-rose-500"
+                    />
+                    {validationErrors.altPhone && (
+                      <p className="text-[10px] text-rose-600 font-medium mt-0.5">
+                        {validationErrors.altPhone}
+                      </p>
+                    )}
                   </div>
 
                   {/* OPTIONAL NOTES */}
